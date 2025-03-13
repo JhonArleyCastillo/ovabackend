@@ -14,7 +14,7 @@ app = FastAPI()
 # Habilitar CORS para el frontend (React)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción se debe especificar el dominio de tu frontend
+    allow_origins=["https://helpova.web.app/"],  # En producción se debe especificar el dominio de tu frontend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
