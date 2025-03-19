@@ -23,7 +23,7 @@ app.add_middleware(
 # -----------------------------------
 # Endpoint WebSocket (Voz / Chat)
 # -----------------------------------
-@app.websocket("/ws")
+@app.websocket("/api/detect")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
