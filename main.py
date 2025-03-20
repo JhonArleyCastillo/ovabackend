@@ -15,7 +15,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://helpova.web.app", "https://helpova.firebaseapp.com"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["get", "post"],
     allow_headers=["content-type", "authorization"],
 )
