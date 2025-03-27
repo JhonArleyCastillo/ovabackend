@@ -1,12 +1,14 @@
-from fastapi import FastAPI, WebSocket, File, UploadFile
+from fastapi import FastAPI, WebSocket, File, UploadFile, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from llm import obtener_respuesta
+from llm import obtener_respuesta, verificar_conexion
 from tts import generar_voz
 from stt import convertir_audio_a_texto
 from image_analysis import detectar_objetos, describir_imagen
 import cv2
 import numpy as np
 import base64
+import json
+import asyncio
 
 # Crear la app FastAPI
 app = FastAPI()
@@ -73,3 +75,40 @@ async def procesar_imagen(file: UploadFile = File(...)):
         "objetos_detectados": objetos_detectados,
         "descripcion": descripcion
     }
+
+@app.get("/status")
+async def get_status():
+    """Endpoint para verificar el estado de la conexión con Hugging Face"""
+    is_connected = verificar_conexion()
+    return {
+        "status": "connected" if is_connected else "disconnected",
+        "message": "Conectado a Hugging Face" if is_connected else "Desconectado de Hugging Face"
+    }
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            try:
+                message_data = json.loads(data)
+                user_message = message_data.get("message", "")
+                
+                # Obtener respuesta del modelo
+                response = obtener_respuesta(user_message)
+                
+                # Enviar respuesta al cliente
+                await websocket.send_json({
+                    "type": "response",
+                    "message": response
+                })
+                
+            except json.JSONDecodeError:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Error al procesar el mensaje"
+                })
+                
+    except WebSocketDisconnect:
+        print("Cliente desconectado")
