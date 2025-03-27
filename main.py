@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, File, UploadFile, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from llm import obtener_respuesta, verificar_conexion
 from tts import generar_voz
 from stt import convertir_audio_a_texto
@@ -13,7 +14,7 @@ import asyncio
 # Crear la app FastAPI
 app = FastAPI()
 
-# Habilitar CORS para el frontend (React)
+# Configurar CORS con opciones más permisivas para desarrollo
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://helpova.web.app", "https://helpova.firebaseapp.com"],
@@ -76,22 +77,39 @@ async def procesar_imagen(file: UploadFile = File(...)):
         "descripcion": descripcion
     }
 
+@app.get("/")
+async def read_root():
+    """Endpoint de prueba para verificar que el servidor está funcionando"""
+    return {"status": "ok", "message": "Servidor funcionando correctamente"}
+
 @app.get("/status")
 async def get_status():
     """Endpoint para verificar el estado de la conexión con Hugging Face"""
-    is_connected = verificar_conexion()
-    return {
-        "status": "connected" if is_connected else "disconnected",
-        "message": "Conectado a Hugging Face" if is_connected else "Desconectado de Hugging Face"
-    }
+    try:
+        is_connected = verificar_conexion()
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "connected" if is_connected else "disconnected",
+                "message": "Conectado a Hugging Face" if is_connected else "Desconectado de Hugging Face"
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Error al verificar la conexión: {str(e)}"
+            }
+        )
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            data = await websocket.receive_text()
             try:
+                data = await websocket.receive_text()
                 message_data = json.loads(data)
                 user_message = message_data.get("message", "")
                 
@@ -103,11 +121,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     "type": "response",
                     "message": response
                 })
-                
             except json.JSONDecodeError:
                 await websocket.send_json({
                     "type": "error",
                     "message": "Error al procesar el mensaje"
+                })
+            except Exception as e:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"Error: {str(e)}"
                 })
                 
     except WebSocketDisconnect:
