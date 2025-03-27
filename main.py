@@ -1,15 +1,16 @@
-from fastapi import FastAPI, WebSocket, File, UploadFile, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, File, UploadFile, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from llm import obtener_respuesta, verificar_conexion
 from tts import generar_voz
 from stt import convertir_audio_a_texto
-from image_analysis import detectar_objetos, describir_imagen
+from image_analysis import detectar_objetos, describir_imagen, reconocer_lenguaje_senas
 import cv2
 import numpy as np
 import base64
 import json
 import asyncio
+from typing import Dict, Any
 
 # Crear la app FastAPI
 app = FastAPI()
@@ -27,7 +28,7 @@ app.add_middleware(
 # Endpoint WebSocket (Voz / Chat)
 # -----------------------------------
 @app.websocket("/api/detect")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_detect_endpoint(websocket: WebSocket):
     await websocket.accept()
 
     while True:
@@ -103,8 +104,8 @@ async def get_status():
             }
         )
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+@app.websocket("/ws/chat")
+async def websocket_chat_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
@@ -134,3 +135,54 @@ async def websocket_endpoint(websocket: WebSocket):
                 
     except WebSocketDisconnect:
         print("Cliente desconectado")
+
+@app.post("/analyze-sign-language")
+async def analyze_sign_language(payload: Dict[str, Any] = Body(...)):
+    """
+    Analiza una imagen para detectar lenguaje de señas
+    """
+    try:
+        # Extraer la imagen base64 del payload
+        base64_image = payload.get("image", "")
+        if not base64_image:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No se proporcionó ninguna imagen", "status": "error"}
+            )
+        
+        # Eliminar el prefijo de datos URI si existe
+        if "base64," in base64_image:
+            base64_image = base64_image.split("base64,")[1]
+        
+        # Decodificar la imagen base64
+        image_bytes = base64.b64decode(base64_image)
+        
+        # Convertir a numpy array para el procesamiento
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Analizar la imagen con el modelo de lenguaje de señas
+        resultado = reconocer_lenguaje_senas(img)
+        
+        # Verificar si hubo un error
+        if "error" in resultado:
+            return JSONResponse(
+                status_code=500,
+                content={"error": resultado["error"], "status": "error"}
+            )
+        
+        # Generar respuesta para el frontend
+        return {
+            "prediction": resultado["resultado"],
+            "confidence": resultado["confianza"],
+            "alternatives": resultado["alternativas"],
+            "status": "success"
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": f"Error al analizar la imagen: {str(e)}",
+                "status": "error"
+            }
+        )

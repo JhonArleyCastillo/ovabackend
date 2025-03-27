@@ -1,8 +1,10 @@
 import numpy as np
 import requests
-from config import HF_API_KEY
+from config import HF_API_KEY, HF_MODELO_SIGN
 from PIL import Image
 import io
+import torch
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 # URL de Hugging Face para BLIP (Image Captioning)
 CAPTION_API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base"
@@ -10,6 +12,23 @@ CAPTION_API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-i
 YOLO_API_URL = "https://api-inference.huggingface.co/models/ultralytics/yolov8"
 
 HEADERS = {"Authorization": f"Bearer {HF_API_KEY}"}
+
+# Variables globales para el modelo de lenguaje de señas
+sign_processor = None
+sign_model = None
+
+def load_sign_language_model():
+    """Carga el modelo de lenguaje de señas si aún no está cargado"""
+    global sign_processor, sign_model
+    if sign_processor is None or sign_model is None:
+        try:
+            sign_processor = AutoImageProcessor.from_pretrained(HF_MODELO_SIGN, use_auth_token=HF_API_KEY)
+            sign_model = AutoModelForImageClassification.from_pretrained(HF_MODELO_SIGN, use_auth_token=HF_API_KEY)
+            print("Modelo de lenguaje de señas cargado correctamente")
+        except Exception as e:
+            print(f"Error al cargar el modelo de lenguaje de señas: {e}")
+            return False
+    return True
 
 def detectar_objetos(imagen_np: np.ndarray):
     """
@@ -83,3 +102,63 @@ def describir_imagen(imagen_bytes: bytes):
             return "No se pudo generar una descripción."
     else:
         return f"Error al generar caption: {response.text}"
+
+def reconocer_lenguaje_senas(imagen_np: np.ndarray):
+    """
+    Analiza una imagen para reconocer lenguaje de señas
+    
+    Args:
+        imagen_np (np.ndarray): Imagen como array de NumPy.
+    
+    Returns:
+        dict: Diccionario con la letra/símbolo detectado y su probabilidad.
+             En caso de error, retorna un mensaje explicativo.
+    """
+    try:
+        # Cargar modelo si no está cargado
+        if not load_sign_language_model():
+            return {"error": "No se pudo cargar el modelo de lenguaje de señas"}
+        
+        # Convertir numpy array a formato RGB si está en BGR (formato de OpenCV)
+        if imagen_np.shape[2] == 3:
+            # Verificar si la imagen está en formato BGR (OpenCV)
+            imagen_rgb = Image.fromarray(imagen_np).convert('RGB')
+        else:
+            imagen_rgb = Image.fromarray(imagen_np)
+        
+        # Preprocesar la imagen para el modelo
+        inputs = sign_processor(images=imagen_rgb, return_tensors="pt")
+        
+        # Realizar la predicción
+        with torch.no_grad():
+            outputs = sign_model(**inputs)
+            logits = outputs.logits
+            # Obtener las probabilidades usando softmax
+            probs = torch.nn.functional.softmax(logits, dim=1)
+            # Obtener los 3 mejores resultados
+            top3_prob, top3_indices = torch.topk(probs, 3)
+            
+            # Convertir a lista para facilitar la serialización
+            resultados = []
+            for i in range(3):
+                if i < len(top3_indices[0]):
+                    idx = top3_indices[0][i].item()
+                    prob = top3_prob[0][i].item()
+                    label = sign_model.config.id2label[idx]
+                    resultados.append({
+                        "simbolo": label,
+                        "probabilidad": round(prob * 100, 2)
+                    })
+            
+            # Obtener el mejor resultado
+            predicted_class_idx = logits.argmax(-1).item()
+            predicted_label = sign_model.config.id2label[predicted_class_idx]
+            
+            return {
+                "resultado": predicted_label,
+                "confianza": round(probs[0][predicted_class_idx].item() * 100, 2),
+                "alternativas": resultados
+            }
+    except Exception as e:
+        print(f"Error en reconocimiento de lenguaje de señas: {e}")
+        return {"error": f"Error al analizar la imagen: {str(e)}"}
