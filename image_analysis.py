@@ -33,7 +33,7 @@ def load_sign_language_model():
     if sign_processor is None or sign_model is None:
         try:
             # Verificar que tenemos una API key válida
-            if not HF_API_KEY or HF_API_KEY == "tu_huggingface_api_key_aqui":
+            if not HF_API_KEY or HF_API_KEY == "":
                 logger.error("API key de Hugging Face no configurada correctamente")
                 return False, "API key de Hugging Face no configurada"
                 

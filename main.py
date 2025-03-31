@@ -12,6 +12,7 @@ import json
 import logging
 from typing import Dict, Any
 from config import HF_API_KEY
+import datetime
 
 # Configurar el sistema de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -28,10 +29,12 @@ app = FastAPI()
 # Configurar CORS con opciones más permisivas para desarrollo
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://helpova.web.app", "https://helpova.firebaseapp.com"],
+    allow_origins=["https://helpova.web.app", "http://localhost:3000", "http://localhost:5000"],  
     allow_credentials=True,
-    allow_methods=["get", "post"],
-    allow_headers=["content-type", "authorization"],
+    allow_methods=["GET", "POST", "OPTIONS"],  
+    allow_headers=["*"],  
+    expose_headers=["*"],  
+    max_age=86400,  # Tiempo de caché para respuestas preflight (24 horas)
 )
 
 # -----------------------------------
@@ -79,20 +82,26 @@ async def get_status():
     """Endpoint para verificar el estado de la conexión con Hugging Face"""
     try:
         is_connected = verificar_conexion()
+        logger.info(f"Estado de conexión: {'conectado' if is_connected else 'desconectado'}")
         return JSONResponse(
             status_code=200,
             content={
                 "status": "connected" if is_connected else "disconnected",
-                "message": "Conectado a Hugging Face" if is_connected else "Desconectado de Hugging Face"
+                "message": "Conectado a Hugging Face" if is_connected else "Desconectado de Hugging Face",
+                "api_version": "1.0",
+                "timestamp": str(datetime.datetime.now())
             }
         )
     except Exception as e:
         logger.error(f"Error al verificar la conexión: {e}")
+        # Asegurar que siempre devolvemos un 200 para que el cliente pueda leer el mensaje de error
         return JSONResponse(
-            status_code=500,
+            status_code=200,
             content={
                 "status": "error",
-                "message": f"Error al verificar la conexión: {str(e)}"
+                "message": f"Error al verificar la conexión: {str(e)}",
+                "error_type": str(type(e).__name__),
+                "timestamp": str(datetime.datetime.now())
             }
         )
 
@@ -138,6 +147,14 @@ async def analyze_sign_language(payload: Dict[str, Any] = Body(...)):
     Analiza una imagen para detectar lenguaje de señas
     """
     try:
+        # Verificar API key de Hugging Face
+        if not HF_API_KEY or HF_API_KEY == "tu_huggingface_api_key_aqui":
+            logger.error("API key de Hugging Face no configurada correctamente")
+            return JSONResponse(
+                status_code=200,  # Usar 200 en lugar de 500 para permitir que el cliente lea el mensaje
+                content={"error": "API key de Hugging Face no configurada", "status": "error"}
+            )
+            
         # Extraer la imagen base64 del payload
         base64_image = payload.get("image", "")
         if not base64_image:
@@ -151,11 +168,25 @@ async def analyze_sign_language(payload: Dict[str, Any] = Body(...)):
             base64_image = base64_image.split("base64,")[1]
         
         # Decodificar la imagen base64
-        image_bytes = base64.b64decode(base64_image)
+        try:
+            image_bytes = base64.b64decode(base64_image)
+        except Exception as e:
+            logger.error(f"Error al decodificar imagen base64: {e}")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Formato de imagen inválido", "status": "error"}
+            )
         
         # Convertir a numpy array para el procesamiento
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if img is None:
+            logger.error("La imagen no pudo ser decodificada correctamente")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "La imagen no pudo ser decodificada", "status": "error"}
+            )
         
         # Analizar la imagen con el modelo de lenguaje de señas
         logger.info("Procesando imagen para análisis de lenguaje de señas")
@@ -165,7 +196,7 @@ async def analyze_sign_language(payload: Dict[str, Any] = Body(...)):
         if "error" in resultado:
             logger.error(f"Error en análisis de señas: {resultado['error']}")
             return JSONResponse(
-                status_code=500,
+                status_code=200,  # Usar 200 en lugar de 500 para permitir que el cliente lea el mensaje
                 content={"error": resultado["error"], "status": "error"}
             )
         
@@ -180,7 +211,7 @@ async def analyze_sign_language(payload: Dict[str, Any] = Body(...)):
     except Exception as e:
         logger.error(f"Error en endpoint analyze-sign-language: {e}")
         return JSONResponse(
-            status_code=500,
+            status_code=200,  # Usar 200 en lugar de 500 para permitir que el cliente lea el mensaje
             content={
                 "error": f"Error al analizar la imagen: {str(e)}",
                 "status": "error"
