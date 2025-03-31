@@ -4,13 +4,23 @@ from fastapi.responses import JSONResponse
 from llm import obtener_respuesta, verificar_conexion
 from tts import generar_voz
 from stt import convertir_audio_a_texto
-from image_analysis import detectar_objetos, describir_imagen, reconocer_lenguaje_senas
+from image_analysis import reconocer_lenguaje_senas, detectar_objetos, describir_imagen
 import cv2
 import numpy as np
 import base64
 import json
-import asyncio
+import logging
 from typing import Dict, Any
+from config import HF_API_KEY
+
+# Configurar el sistema de logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+from huggingface_hub import InferenceClient
+
+# Crear cliente de Hugging Face usando la API key desde config
+client = InferenceClient(api_key=HF_API_KEY)
 
 # Crear la app FastAPI
 app = FastAPI()
@@ -36,7 +46,7 @@ async def websocket_detect_endpoint(websocket: WebSocket):
             audio = await websocket.receive_bytes()
 
             texto_usuario = convertir_audio_a_texto(audio)
-            print(f"Usuario dijo: {texto_usuario}")
+            logger.info(f"Usuario dijo: {texto_usuario}")
 
             if "hola" in texto_usuario.lower():
                 respuesta_texto = "Hola, ¿qué deseas realizar hoy?"
@@ -52,31 +62,12 @@ async def websocket_detect_endpoint(websocket: WebSocket):
             })
 
         except Exception as e:
-            print(f"Error en WebSocket: {e}")
+            logger.error(f"Error en WebSocket: {e}")
             break
 
 # -----------------------------------
 # Endpoint HTTP (Análisis de Imágenes)
 # -----------------------------------
-@app.post("/procesar-imagen")
-async def procesar_imagen(file: UploadFile = File(...)):
-    """
-    Recibe una imagen, la analiza (YOLO o BLIP) y devuelve resultados.
-    """
-    contenido = await file.read()
-
-    # Decodificar imagen a numpy array (para YOLO)
-    imagen_np = cv2.imdecode(np.frombuffer(contenido, np.uint8), cv2.IMREAD_COLOR)
-
-    # Realizar análisis
-    objetos_detectados = detectar_objetos(imagen_np)
-    descripcion = describir_imagen(contenido)
-
-    # Responder al frontend
-    return {
-        "objetos_detectados": objetos_detectados,
-        "descripcion": descripcion
-    }
 
 @app.get("/")
 async def read_root():
@@ -96,6 +87,7 @@ async def get_status():
             }
         )
     except Exception as e:
+        logger.error(f"Error al verificar la conexión: {e}")
         return JSONResponse(
             status_code=500,
             content={
@@ -114,6 +106,8 @@ async def websocket_chat_endpoint(websocket: WebSocket):
                 message_data = json.loads(data)
                 user_message = message_data.get("message", "")
                 
+                logger.info(f"Mensaje recibido: {user_message[:50]}...")
+                
                 # Obtener respuesta del modelo
                 response = obtener_respuesta(user_message)
                 
@@ -123,18 +117,20 @@ async def websocket_chat_endpoint(websocket: WebSocket):
                     "message": response
                 })
             except json.JSONDecodeError:
+                logger.error("Error al decodificar JSON del mensaje")
                 await websocket.send_json({
                     "type": "error",
-                    "message": "Error al procesar el mensaje"
+                    "message": "Error al procesar el mensaje: formato JSON inválido"
                 })
             except Exception as e:
+                logger.error(f"Error en el procesamiento del mensaje: {e}")
                 await websocket.send_json({
                     "type": "error",
                     "message": f"Error: {str(e)}"
                 })
                 
     except WebSocketDisconnect:
-        print("Cliente desconectado")
+        logger.info("Cliente desconectado del WebSocket")
 
 @app.post("/analyze-sign-language")
 async def analyze_sign_language(payload: Dict[str, Any] = Body(...)):
@@ -162,16 +158,19 @@ async def analyze_sign_language(payload: Dict[str, Any] = Body(...)):
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         # Analizar la imagen con el modelo de lenguaje de señas
+        logger.info("Procesando imagen para análisis de lenguaje de señas")
         resultado = reconocer_lenguaje_senas(img)
         
         # Verificar si hubo un error
         if "error" in resultado:
+            logger.error(f"Error en análisis de señas: {resultado['error']}")
             return JSONResponse(
                 status_code=500,
                 content={"error": resultado["error"], "status": "error"}
             )
         
         # Generar respuesta para el frontend
+        logger.info(f"Análisis exitoso: {resultado['resultado']} ({resultado['confianza']}%)")
         return {
             "prediction": resultado["resultado"],
             "confidence": resultado["confianza"],
@@ -179,10 +178,114 @@ async def analyze_sign_language(payload: Dict[str, Any] = Body(...)):
             "status": "success"
         }
     except Exception as e:
+        logger.error(f"Error en endpoint analyze-sign-language: {e}")
         return JSONResponse(
             status_code=500,
             content={
                 "error": f"Error al analizar la imagen: {str(e)}",
+                "status": "error"
+            }
+        )
+
+@app.post("/detect-objects")
+async def detect_objects(payload: Dict[str, Any] = Body(...)):
+    """
+    Detecta objetos en una imagen usando YOLOv8
+    """
+    try:
+        # Extraer la imagen base64 del payload
+        base64_image = payload.get("image", "")
+        if not base64_image:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No se proporcionó ninguna imagen", "status": "error"}
+            )
+        
+        # Eliminar el prefijo de datos URI si existe
+        if "base64," in base64_image:
+            base64_image = base64_image.split("base64,")[1]
+        
+        # Decodificar la imagen base64
+        image_bytes = base64.b64decode(base64_image)
+        
+        # Convertir a numpy array para el procesamiento
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Detectar objetos en la imagen
+        logger.info("Procesando imagen para detección de objetos")
+        resultado = detectar_objetos(img)
+        
+        # Verificar si hubo un error
+        if isinstance(resultado, dict) and "error" in resultado:
+            logger.error(f"Error en detección de objetos: {resultado['error']}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": resultado["error"], "status": "error"}
+            )
+        
+        # Generar respuesta para el frontend
+        logger.info(f"Detección exitosa: {len(resultado)} objetos encontrados")
+        return {
+            "objects": resultado,
+            "count": len(resultado),
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"Error en endpoint detect-objects: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": f"Error al detectar objetos en la imagen: {str(e)}",
+                "status": "error"
+            }
+        )
+
+@app.post("/describe-image")
+async def describe_image(payload: Dict[str, Any] = Body(...)):
+    """
+    Genera una descripción textual de una imagen usando BLIP
+    """
+    try:
+        # Extraer la imagen base64 del payload
+        base64_image = payload.get("image", "")
+        if not base64_image:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No se proporcionó ninguna imagen", "status": "error"}
+            )
+        
+        # Eliminar el prefijo de datos URI si existe
+        if "base64," in base64_image:
+            base64_image = base64_image.split("base64,")[1]
+        
+        # Decodificar la imagen base64
+        image_bytes = base64.b64decode(base64_image)
+        
+        # Describir la imagen
+        logger.info("Procesando imagen para generación de descripción")
+        resultado = describir_imagen(image_bytes)
+        
+        # Verificar si hubo un error
+        if "error" in resultado:
+            logger.error(f"Error en descripción de imagen: {resultado['error']}")
+            return JSONResponse(
+                status_code=500,
+                content={"error": resultado["error"], "status": "error"}
+            )
+        
+        # Generar respuesta para el frontend
+        logger.info(f"Descripción generada correctamente")
+        return {
+            "description": resultado["descripcion"],
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"Error en endpoint describe-image: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": f"Error al generar descripción de la imagen: {str(e)}",
                 "status": "error"
             }
         )
