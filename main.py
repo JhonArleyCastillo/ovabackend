@@ -1,322 +1,68 @@
-from fastapi import FastAPI, WebSocket, File, UploadFile, WebSocketDisconnect, Body
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from llm import obtener_respuesta, verificar_conexion
-from tts import generar_voz
-from stt import convertir_audio_a_texto
-from image_analysis import reconocer_lenguaje_senas, detectar_objetos, describir_imagen
-import cv2
-import numpy as np
-import base64
-import json
 import logging
-from typing import Dict, Any
-from config import HF_API_KEY
-import datetime
 
-# Configurar el sistema de logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Importar configuración y funciones de configuración
+from config import ALLOWED_ORIGINS, CORS_MAX_AGE, HF_API_KEY # Asegurarse que HF_API_KEY se importe si se usa aquí (aunque no debería)
+from logging_config import setup_logging
+
+# Importar routers
+from routers import status_router, websocket_router, image_router
+
+# Configurar el logging ANTES de cualquier otra cosa
+setup_logging()
 logger = logging.getLogger(__name__)
 
-from huggingface_hub import InferenceClient
-
-# Crear cliente de Hugging Face usando la API key desde config
-client = InferenceClient(api_key=HF_API_KEY)
-
-# Crear la app FastAPI
-app = FastAPI()
-
-# Configurar CORS con opciones más permisivas para desarrollo
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://helpova.web.app", "http://localhost:3000", "http://localhost:5000"],  
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],  
-    allow_headers=["*"],  
-    expose_headers=["*"],  
-    max_age=86400,  # Tiempo de caché para respuestas preflight (24 horas)
+# Crear la instancia de la aplicación FastAPI
+app = FastAPI(
+    title="API Asistente Inteligente Multimodal",
+    description="API para interactuar con un asistente IA usando voz, texto e imágenes.",
+    version="1.0.0"
 )
 
-# -----------------------------------
-# Endpoint WebSocket (Voz / Chat)
-# -----------------------------------
-@app.websocket("/api/detect")
-async def websocket_detect_endpoint(websocket: WebSocket):
-    await websocket.accept()
+# Configurar CORS
+logger.info(f"Configurando CORS con orígenes permitidos: {ALLOWED_ORIGINS}")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],  # Métodos permitidos
+    allow_headers=["*"],  # Permitir todos los encabezados
+    expose_headers=["*"], # Exponer todos los encabezados (útil para algunos casos)
+    max_age=CORS_MAX_AGE, # Tiempo de caché para preflight
+)
 
-    while True:
-        try:
-            audio = await websocket.receive_bytes()
+# Incluir los routers en la aplicación principal
+logger.info("Incluyendo routers en la aplicación")
+app.include_router(status_router.router, tags=["Estado"])
+app.include_router(websocket_router.router, prefix="/api", tags=["WebSockets y Audio"])
+app.include_router(image_router.router, prefix="/api", tags=["Análisis de Imágenes"])
 
-            texto_usuario = convertir_audio_a_texto(audio)
-            logger.info(f"Usuario dijo: {texto_usuario}")
+# Ya no se necesita la inicialización del cliente aquí, se maneja en el servicio
+# from huggingface_hub import InferenceClient
+# client = InferenceClient(api_key=HF_API_KEY)
 
-            if "hola" in texto_usuario.lower():
-                respuesta_texto = "Hola, ¿qué deseas realizar hoy?"
-            else:
-                respuesta_texto = obtener_respuesta(texto_usuario)
+# Los endpoints definidos aquí son redundantes porque ya están en los routers
+# Se eliminan las siguientes definiciones:
+# @app.websocket("/api/detect") ...
+# @app.get("/") ...
+# @app.get("/status") ...
+# @app.websocket("/ws/chat") ...
+# @app.post("/analyze-sign-language") ...
+# @app.post("/detect-objects") ...
+# @app.post("/describe-image") ...
 
-            archivo_audio = generar_voz(respuesta_texto)
-            archivo_audio_base64 = base64.b64encode(archivo_audio).decode("utf-8")
+# Opcional: Añadir un manejador global de excepciones
+# @app.exception_handler(Exception)
+# async def generic_exception_handler(request, exc):
+#     logger.error(f"Error no manejado: {exc}", exc_info=True)
+#     return JSONResponse(
+#         status_code=500,
+#         content={"error": "Error interno del servidor", "status": "error"}
+#     )
 
-            await websocket.send_json({
-                "texto": respuesta_texto,
-                "audio": archivo_audio_base64
-            })
+# Mensaje de inicio
+logger.info("Aplicación FastAPI configurada y lista para iniciar.")
 
-        except Exception as e:
-            logger.error(f"Error en WebSocket: {e}")
-            break
-
-# -----------------------------------
-# Endpoint HTTP (Análisis de Imágenes)
-# -----------------------------------
-
-@app.get("/")
-async def read_root():
-    """Endpoint de prueba para verificar que el servidor está funcionando"""
-    return {"status": "ok", "message": "Servidor funcionando correctamente"}
-
-@app.get("/status")
-async def get_status():
-    """Endpoint para verificar el estado de la conexión con Hugging Face"""
-    try:
-        is_connected = verificar_conexion()
-        logger.info(f"Estado de conexión: {'conectado' if is_connected else 'desconectado'}")
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "connected" if is_connected else "disconnected",
-                "message": "Conectado a Hugging Face" if is_connected else "Desconectado de Hugging Face",
-                "api_version": "1.0",
-                "timestamp": str(datetime.datetime.now())
-            }
-        )
-    except Exception as e:
-        logger.error(f"Error al verificar la conexión: {e}")
-        # Asegurar que siempre devolvemos un 200 para que el cliente pueda leer el mensaje de error
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "error",
-                "message": f"Error al verificar la conexión: {str(e)}",
-                "error_type": str(type(e).__name__),
-                "timestamp": str(datetime.datetime.now())
-            }
-        )
-
-@app.websocket("/ws/chat")
-async def websocket_chat_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        while True:
-            try:
-                data = await websocket.receive_text()
-                message_data = json.loads(data)
-                user_message = message_data.get("message", "")
-                
-                logger.info(f"Mensaje recibido: {user_message[:50]}...")
-                
-                # Obtener respuesta del modelo
-                response = obtener_respuesta(user_message)
-                
-                # Enviar respuesta al cliente
-                await websocket.send_json({
-                    "type": "response",
-                    "message": response
-                })
-            except json.JSONDecodeError:
-                logger.error("Error al decodificar JSON del mensaje")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": "Error al procesar el mensaje: formato JSON inválido"
-                })
-            except Exception as e:
-                logger.error(f"Error en el procesamiento del mensaje: {e}")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": f"Error: {str(e)}"
-                })
-                
-    except WebSocketDisconnect:
-        logger.info("Cliente desconectado del WebSocket")
-
-@app.post("/analyze-sign-language")
-async def analyze_sign_language(payload: Dict[str, Any] = Body(...)):
-    """
-    Analiza una imagen para detectar lenguaje de señas
-    """
-    try:
-        # Verificar API key de Hugging Face
-        if not HF_API_KEY or HF_API_KEY == "tu_huggingface_api_key_aqui":
-            logger.error("API key de Hugging Face no configurada correctamente")
-            return JSONResponse(
-                status_code=200,  # Usar 200 en lugar de 500 para permitir que el cliente lea el mensaje
-                content={"error": "API key de Hugging Face no configurada", "status": "error"}
-            )
-            
-        # Extraer la imagen base64 del payload
-        base64_image = payload.get("image", "")
-        if not base64_image:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "No se proporcionó ninguna imagen", "status": "error"}
-            )
-        
-        # Eliminar el prefijo de datos URI si existe
-        if "base64," in base64_image:
-            base64_image = base64_image.split("base64,")[1]
-        
-        # Decodificar la imagen base64
-        try:
-            image_bytes = base64.b64decode(base64_image)
-        except Exception as e:
-            logger.error(f"Error al decodificar imagen base64: {e}")
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Formato de imagen inválido", "status": "error"}
-            )
-        
-        # Convertir a numpy array para el procesamiento
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if img is None:
-            logger.error("La imagen no pudo ser decodificada correctamente")
-            return JSONResponse(
-                status_code=400,
-                content={"error": "La imagen no pudo ser decodificada", "status": "error"}
-            )
-        
-        # Analizar la imagen con el modelo de lenguaje de señas
-        logger.info("Procesando imagen para análisis de lenguaje de señas")
-        resultado = reconocer_lenguaje_senas(img)
-        
-        # Verificar si hubo un error
-        if "error" in resultado:
-            logger.error(f"Error en análisis de señas: {resultado['error']}")
-            return JSONResponse(
-                status_code=200,  # Usar 200 en lugar de 500 para permitir que el cliente lea el mensaje
-                content={"error": resultado["error"], "status": "error"}
-            )
-        
-        # Generar respuesta para el frontend
-        logger.info(f"Análisis exitoso: {resultado['resultado']} ({resultado['confianza']}%)")
-        return {
-            "prediction": resultado["resultado"],
-            "confidence": resultado["confianza"],
-            "alternatives": resultado["alternativas"],
-            "status": "success"
-        }
-    except Exception as e:
-        logger.error(f"Error en endpoint analyze-sign-language: {e}")
-        return JSONResponse(
-            status_code=200,  # Usar 200 en lugar de 500 para permitir que el cliente lea el mensaje
-            content={
-                "error": f"Error al analizar la imagen: {str(e)}",
-                "status": "error"
-            }
-        )
-
-@app.post("/detect-objects")
-async def detect_objects(payload: Dict[str, Any] = Body(...)):
-    """
-    Detecta objetos en una imagen usando YOLOv8
-    """
-    try:
-        # Extraer la imagen base64 del payload
-        base64_image = payload.get("image", "")
-        if not base64_image:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "No se proporcionó ninguna imagen", "status": "error"}
-            )
-        
-        # Eliminar el prefijo de datos URI si existe
-        if "base64," in base64_image:
-            base64_image = base64_image.split("base64,")[1]
-        
-        # Decodificar la imagen base64
-        image_bytes = base64.b64decode(base64_image)
-        
-        # Convertir a numpy array para el procesamiento
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        # Detectar objetos en la imagen
-        logger.info("Procesando imagen para detección de objetos")
-        resultado = detectar_objetos(img)
-        
-        # Verificar si hubo un error
-        if isinstance(resultado, dict) and "error" in resultado:
-            logger.error(f"Error en detección de objetos: {resultado['error']}")
-            return JSONResponse(
-                status_code=500,
-                content={"error": resultado["error"], "status": "error"}
-            )
-        
-        # Generar respuesta para el frontend
-        logger.info(f"Detección exitosa: {len(resultado)} objetos encontrados")
-        return {
-            "objects": resultado,
-            "count": len(resultado),
-            "status": "success"
-        }
-    except Exception as e:
-        logger.error(f"Error en endpoint detect-objects: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": f"Error al detectar objetos en la imagen: {str(e)}",
-                "status": "error"
-            }
-        )
-
-@app.post("/describe-image")
-async def describe_image(payload: Dict[str, Any] = Body(...)):
-    """
-    Genera una descripción textual de una imagen usando BLIP
-    """
-    try:
-        # Extraer la imagen base64 del payload
-        base64_image = payload.get("image", "")
-        if not base64_image:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "No se proporcionó ninguna imagen", "status": "error"}
-            )
-        
-        # Eliminar el prefijo de datos URI si existe
-        if "base64," in base64_image:
-            base64_image = base64_image.split("base64,")[1]
-        
-        # Decodificar la imagen base64
-        image_bytes = base64.b64decode(base64_image)
-        
-        # Describir la imagen
-        logger.info("Procesando imagen para generación de descripción")
-        resultado = describir_imagen(image_bytes)
-        
-        # Verificar si hubo un error
-        if "error" in resultado:
-            logger.error(f"Error en descripción de imagen: {resultado['error']}")
-            return JSONResponse(
-                status_code=500,
-                content={"error": resultado["error"], "status": "error"}
-            )
-        
-        # Generar respuesta para el frontend
-        logger.info(f"Descripción generada correctamente")
-        return {
-            "description": resultado["descripcion"],
-            "status": "success"
-        }
-    except Exception as e:
-        logger.error(f"Error en endpoint describe-image: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": f"Error al generar descripción de la imagen: {str(e)}",
-                "status": "error"
-            }
-        )
+# Nota: Uvicorn se ejecutará externamente (ej: `uvicorn backend.main:app --reload`)
+# Por lo tanto, no incluimos `if __name__ == "__main__": uvicorn.run(...)` aquí
