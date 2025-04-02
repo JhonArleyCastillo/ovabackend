@@ -24,9 +24,9 @@ app = FastAPI(
 logger.info(f"Configurando CORS con orígenes permitidos: {ALLOWED_ORIGINS}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=["https://helpova.web.app", "http://localhost:3000"],  # Permitir tanto producción como desarrollo
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],  # Métodos permitidos
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],  # Añadir todos los métodos posibles
     allow_headers=["*"],  # Permitir todos los encabezados
     expose_headers=["*"], # Exponer todos los encabezados (útil para algunos casos)
     max_age=CORS_MAX_AGE, # Tiempo de caché para preflight
