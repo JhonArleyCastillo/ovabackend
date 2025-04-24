@@ -35,3 +35,42 @@ def encode_audio_to_base64(audio_bytes: bytes) -> str:
 def create_error_response(message: str, status_code: int = 500) -> tuple[dict, int]:
     """Crea una respuesta JSON de error estándar."""
     return {"error": message, "status": "error"}, status_code
+
+def validate_image_magic_bytes(image_data):
+    """
+    Valida que un archivo sea realmente una imagen mediante magic bytes
+    
+    Args:
+        image_data (bytes): Datos binarios de la imagen
+        
+    Returns:
+        tuple: (es_valido, tipo_detectado)
+    """
+    if not image_data or len(image_data) < 12:
+        return False, None
+    
+    # Definir las firmas de magic bytes para los tipos permitidos
+    signatures = {
+        'image/jpeg': [(b'\xFF\xD8\xFF', 0)],
+        'image/png': [(b'\x89PNG\r\n\x1A\n', 0)],
+        'image/webp': [(b'RIFF', 0), (b'WEBP', 8)]
+    }
+    
+    # Verificar cada tipo de imagen
+    for mime_type, sig_list in signatures.items():
+        valid = True
+        for signature, offset in sig_list:
+            if len(image_data) < offset + len(signature):
+                valid = False
+                break
+                
+            if image_data[offset:offset+len(signature)] != signature:
+                valid = False
+                break
+                
+        if valid:
+            logger.debug(f"Tipo de imagen detectado por magic bytes: {mime_type}")
+            return True, mime_type
+    
+    logger.warning("Archivo no es una imagen válida según magic bytes")
+    return False, None

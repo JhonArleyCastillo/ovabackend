@@ -1,68 +1,71 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-
-# Importar configuración y funciones de configuración
-from config import ALLOWED_ORIGINS, CORS_MAX_AGE, HF_API_KEY # Asegurarse que HF_API_KEY se importe si se usa aquí (aunque no debería)
-from logging_config import setup_logging
-
-# Importar routers
+from config import ALLOWED_ORIGINS, CORS_MAX_AGE
 from routers import status_router, websocket_router, image_router
+from logging_config import configure_logging
+import sys
+import os
 
-# Configurar el logging ANTES de cualquier otra cosa
-setup_logging()
+# Configurar logging
 logger = logging.getLogger(__name__)
+configure_logging()
 
-# Crear la instancia de la aplicación FastAPI
+# Determinar el entorno (desarrollo o producción)
+IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development") == "development"
+
 app = FastAPI(
     title="API Asistente Inteligente Multimodal",
     description="API para interactuar con un asistente IA usando voz, texto e imágenes.",
     version="1.0.0"
 )
 
-# Configurar CORS
+# Configurar CORS con diferentes configuraciones según el entorno
 logger.info(f"Configurando CORS con orígenes permitidos: {ALLOWED_ORIGINS}")
+logger.info(f"Entorno de ejecución: {'Desarrollo' if IS_DEVELOPMENT else 'Producción'}")
+
+# Headers específicos que realmente necesita la aplicación
+allowed_headers = ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"]
+exposed_headers = ["Content-Length", "Content-Type"]
+
+# Métodos HTTP que realmente utiliza la aplicación
+allowed_methods = ["GET", "POST", "OPTIONS"]
+if IS_DEVELOPMENT:
+    # En desarrollo podemos permitir más métodos para facilitar pruebas
+    allowed_methods.extend(["PUT", "DELETE"])
+    # En desarrollo podemos ser un poco más permisivos con los headers
+    allowed_headers.append("*")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://helpova.web.app", "http://localhost:3000"],  # Permitir tanto producción como desarrollo
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],  # Añadir todos los métodos posibles
-    allow_headers=["*"],  # Permitir todos los encabezados
-    expose_headers=["*"], # Exponer todos los encabezados (útil para algunos casos)
-    max_age=CORS_MAX_AGE, # Tiempo de caché para preflight
+    allow_methods=allowed_methods,
+    allow_headers=allowed_headers,
+    expose_headers=exposed_headers,
+    max_age=CORS_MAX_AGE,
 )
 
-# Incluir los routers en la aplicación principal
-logger.info("Incluyendo routers en la aplicación")
+# Incluir routers
+# WebSocket router no lleva prefijo adicional
+app.include_router(websocket_router.router, tags=["WebSockets y Audio"])
+# Los routers REST no necesitan prefijo adicional ya que se incluye en las rutas
 app.include_router(status_router.router, tags=["Estado"])
-app.include_router(websocket_router.router, prefix="/api", tags=["WebSockets y Audio"])
-app.include_router(image_router.router, prefix="/api", tags=["Análisis de Imágenes"])
+app.include_router(image_router.router, tags=["Análisis de Imágenes"])
 
-# Ya no se necesita la inicialización del cliente aquí, se maneja en el servicio
-# from huggingface_hub import InferenceClient
-# client = InferenceClient(api_key=HF_API_KEY)
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Iniciando servidor...")
+    
+    # Verificar configuraciones críticas
+    if not ALLOWED_ORIGINS:
+        logger.error("ALLOWED_ORIGINS no está configurado correctamente")
+        sys.exit(1)
+    
+    # Registrar información sobre la configuración de seguridad
+    logger.info(f"Métodos HTTP permitidos: {allowed_methods}")
+    logger.info(f"Headers permitidos: {allowed_headers}")
+    logger.info(f"Headers expuestos: {exposed_headers}")
+        
+    logger.info("Servidor iniciado correctamente")
 
-# Los endpoints definidos aquí son redundantes porque ya están en los routers
-# Se eliminan las siguientes definiciones:
-# @app.websocket("/api/detect") ...
-# @app.get("/") ...
-# @app.get("/status") ...
-# @app.websocket("/ws/chat") ...
-# @app.post("/analyze-sign-language") ...
-# @app.post("/detect-objects") ...
-# @app.post("/describe-image") ...
-
-# Opcional: Añadir un manejador global de excepciones
-# @app.exception_handler(Exception)
-# async def generic_exception_handler(request, exc):
-#     logger.error(f"Error no manejado: {exc}", exc_info=True)
-#     return JSONResponse(
-#         status_code=500,
-#         content={"error": "Error interno del servidor", "status": "error"}
-#     )
-
-# Mensaje de inicio
-logger.info("Aplicación FastAPI configurada y lista para iniciar.")
-
-# Nota: Uvicorn se ejecutará externamente (ej: `uvicorn backend.main:app --reload`)
-# Por lo tanto, no incluimos `if __name__ == "__main__": uvicorn.run(...)` aquí
