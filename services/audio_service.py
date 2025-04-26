@@ -1,5 +1,6 @@
 import logging
-from services.huggingface_service import hf_client
+# Cambiado a importación relativa
+from .huggingface_service import hf_client
 
 logger = logging.getLogger(__name__)
 
@@ -38,4 +39,4 @@ def text_to_speech(text: str) -> bytes | None:
 # 
 # def generar_voz(text: str) -> bytes | None:
 #     logger.warning("Usando función legacy 'generar_voz'. Considerar migrar a 'text_to_speech'.")
-#     return text_to_speech(text) 
+#     return text_to_speech(text)

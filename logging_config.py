@@ -33,5 +33,13 @@ def setup_logging(level=logging.INFO):
     logger = logging.getLogger(__name__)
     logger.info("Sistema de logging configurado.")
 
+# Added configure_logging function to resolve import error
+def configure_logging(level=logging.INFO):
+    """
+    Alias para setup_logging para mantener compatibilidad con código existente.
+    Configura el sistema de logging para la aplicación.
+    """
+    return setup_logging(level)
+
 # Configurar al importar el módulo
 # setup_logging() # Comentado para llamar explícitamente en main.py

@@ -1,7 +1,9 @@
 import logging
 import numpy as np
-from services.huggingface_service import hf_client
+# Cambiado a importación relativa
+from .huggingface_service import hf_client
 import cv2 # Asegurarse que cv2 está importado
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +11,55 @@ logger = logging.getLogger(__name__)
 DEFAULT_SIGN_LANGUAGE_MODEL = "facebook/wav2vec2-large-xlsr-53-spanish-with-lm" # Ejemplo
 DEFAULT_OBJECT_DETECTION_MODEL = "facebook/detr-resnet-50" # Ejemplo
 DEFAULT_IMAGE_CAPTIONING_MODEL = "nlpconnect/vit-gpt2-image-captioning" # Ejemplo
+
+async def analyze_image(image: Image.Image) -> dict:
+    """
+    Función principal para analizar una imagen.
+    Detecta objetos y genera una descripción.
+    
+    Args:
+        image: Imagen PIL a analizar
+    
+    Returns:
+        dict: Resultados del análisis con objetos detectados y descripción
+    """
+    # Convertir imagen PIL a numpy array para procesamiento
+    np_image = np.array(image)
+    
+    # Detectar objetos en la imagen
+    objects = detect_objects(np_image)
+    
+    # Convertir la imagen a bytes para el proceso de captioning
+    img_byte_arr = cv2.imencode('.jpg', np_image)[1].tobytes()
+    
+    # Obtener descripción de la imagen
+    description_result = describe_image_captioning(img_byte_arr)
+    
+    # Preparar respuesta
+    result = {
+        "objects": objects if isinstance(objects, list) else [],
+        "description": description_result.get("descripcion", "No se pudo generar una descripción")
+    }
+    
+    return result
+
+async def process_sign_language(image: Image.Image) -> dict:
+    """
+    Procesa una imagen de lenguaje de señas y devuelve la interpretación.
+    
+    Args:
+        image: Imagen PIL de lenguaje de señas
+    
+    Returns:
+        dict: Resultado del reconocimiento de señas
+    """
+    # Convertir imagen PIL a numpy array para procesamiento
+    np_image = np.array(image)
+    
+    # Reconocer el lenguaje de señas en la imagen
+    result = recognize_sign_language(np_image)
+    
+    return result
 
 def recognize_sign_language(image: np.ndarray) -> dict:
     """Reconoce lenguaje de señas en una imagen."""
@@ -88,4 +139,4 @@ def describe_image_captioning(image_bytes: bytes) -> dict:
 # Funciones legacy eliminadas
 # reconocer_lenguaje_senas = recognize_sign_language
 # detectar_objetos = detect_objects
-# describir_imagen = describe_image_captioning 
+# describir_imagen = describe_image_captioning

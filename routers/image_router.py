@@ -3,10 +3,10 @@ import logging
 from typing import List
 import io
 from PIL import Image
-from services.image_service import analyze_image, process_sign_language
-# Importar las rutas definidas
-from routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
-from utils import validate_image_magic_bytes
+# Cambiado a importaciones absolutas desde backend
+from backend.services.image_service import analyze_image, process_sign_language
+from backend.routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
+from backend.utils import validate_image_magic_bytes
 
 # Configurar logging
 logger = logging.getLogger(__name__)

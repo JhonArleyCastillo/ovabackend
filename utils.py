@@ -1,8 +1,22 @@
+"""
+Utilidades y herramientas para la aplicación.
+
+Este archivo contiene funciones de utilidad para diversas tareas como
+configuración inicial, herramientas de mantenimiento, etc.
+"""
+
 import base64
 import numpy as np
 import cv2
 import logging
+import argparse
+import sys
+from database import db_session
+from db_models import AdministradorModel
+from auth import get_password_hash
 
+# Configurar logging básico
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def decode_base64_image(base64_string: str) -> np.ndarray | None:
@@ -74,3 +88,67 @@ def validate_image_magic_bytes(image_data):
     
     logger.warning("Archivo no es una imagen válida según magic bytes")
     return False, None
+
+def crear_admin_inicial(email: str, nombre: str, password: str):
+    """
+    Crea el administrador inicial con privilegios de superadmin.
+    
+    Args:
+        email: Email del administrador
+        nombre: Nombre del administrador
+        password: Contraseña del administrador
+    
+    Returns:
+        bool: True si se creó correctamente, False en caso contrario
+    """
+    try:
+        # Verificar si ya existe un administrador con ese email
+        admin_existente = AdministradorModel.obtener_por_email(email)
+        
+        if admin_existente:
+            logger.warning(f"Ya existe un administrador con el email {email}")
+            return False
+        
+        # Crear el nuevo administrador
+        hashed_password = get_password_hash(password)
+        nuevo_admin_id = AdministradorModel.crear(
+            email=email,
+            nombre=nombre,
+            hashed_password=hashed_password,
+            es_superadmin=True,  # Este será un superadmin
+            activo=True
+        )
+        
+        logger.info(f"Administrador {email} creado exitosamente con ID {nuevo_admin_id}")
+        return True
+            
+    except Exception as e:
+        logger.error(f"Error al crear el administrador inicial: {e}")
+        return False
+
+def main():
+    """Función principal para inicializar la base de datos con un administrador."""
+    parser = argparse.ArgumentParser(description="Herramienta para gestionar la aplicación")
+    
+    subparsers = parser.add_subparsers(dest="comando", help="Comandos disponibles")
+    
+    # Comando para crear un administrador inicial
+    create_admin_parser = subparsers.add_parser("crear-admin", help="Crea un administrador inicial")
+    create_admin_parser.add_argument("--email", required=True, help="Email del administrador")
+    create_admin_parser.add_argument("--nombre", required=True, help="Nombre del administrador")
+    create_admin_parser.add_argument("--password", required=True, help="Contraseña del administrador")
+    
+    args = parser.parse_args()
+    
+    if args.comando == "crear-admin":
+        exito = crear_admin_inicial(args.email, args.nombre, args.password)
+        if exito:
+            logger.info("Administrador creado exitosamente")
+        else:
+            logger.error("Error al crear el administrador")
+            sys.exit(1)
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()

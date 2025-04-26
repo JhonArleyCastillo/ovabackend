@@ -1,6 +1,9 @@
 from huggingface_hub import InferenceClient
-from config import HF_API_KEY
+# Cambiado a importación absoluta desde backend
+from backend.config import HF_API_KEY
 import logging
+import os
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +14,8 @@ class HuggingFaceService:
     def get_client(cls) -> InferenceClient:
         """Obtiene o inicializa el cliente de inferencia de Hugging Face."""
         if cls._client is None:
-            if not HF_API_KEY or HF_API_KEY == "tu_huggingface_api_key_aqui":
+            if not HF_API_KEY or HF_API_KEY == os.getenv("HF_API_KEY"):
+                # Cargar variables de entorno desde el archivo .env
                 logger.error("API key de Hugging Face no configurada correctamente.")
                 raise ValueError("API key de Hugging Face no configurada")
             try:
@@ -43,4 +47,4 @@ class HuggingFaceService:
 
 # Exportar una instancia o métodos estáticos para uso fácil
 hf_client = HuggingFaceService.get_client
-verify_hf_connection = HuggingFaceService.verify_connection 
+verify_hf_connection = HuggingFaceService.verify_connection
