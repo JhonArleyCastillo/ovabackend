@@ -6,33 +6,30 @@ gestión de tokens JWT y verificación de contraseñas.
 
 from datetime import datetime, timedelta
 from typing import Optional, Union, Dict, Any
-import jwt
-import bcrypt
+import jwt as pyjwt  # Cambiado a un alias más claro
+from passlib.hash import bcrypt  # Usamos passlib.hash.bcrypt para mejor estabilidad
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import mysql.connector
 
-# Cambiado a importaciones absolutas desde backend
-from backend.config import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from backend.database import get_db
-import backend.db_models as db_models
-import backend.schemas as schemas
-from backend.security_utils import verify_password
+# Cambiado a importaciones relativas
+from config import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from database import get_db
+import db_models as db_models
+import schemas as schemas
+from security_utils import verify_password
 
 # Definir get_password_hash directamente en auth.py para evitar la importación circular
 def get_password_hash(password: str) -> str:
     """
     Genera un hash seguro para una contraseña dada.
-    Retorna el hash como una cadena de texto (decodificada).
+    Retorna el hash como una cadena de texto.
     """
-    password_bytes = password.encode('utf-8')
-    salt = bcrypt.gensalt()
-    hashed_password_bytes = bcrypt.hashpw(password_bytes, salt)
-    # Decodificar a utf-8 para almacenar como string en la base de datos
-    return hashed_password_bytes.decode('utf-8')
+    # passlib.hash.bcrypt maneja internamente la conversión a bytes y el salt
+    return bcrypt.hash(password)
 
-# Configurar OAuth2 con JWT
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token")
+# Configurar OAuth2 con JWT - corregir la URL con una barra al inicio para ruta absoluta
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
 def authenticate_admin(db: mysql.connector.connection.MySQLConnection, email: str, password: str) -> Optional[Dict[str, Any]]:
     """
@@ -63,7 +60,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     )
     
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    encoded_jwt = pyjwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
 def register_admin_session(
@@ -107,7 +104,7 @@ async def get_current_admin(
     
     try:
         # Decodificar el token usando PyJWT
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = pyjwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         email: str = payload.get("sub")
         admin_id: int = payload.get("admin_id")
         
@@ -115,7 +112,7 @@ async def get_current_admin(
             raise credentials_exception
             
         token_data = schemas.TokenData(email=email, admin_id=admin_id)
-    except jwt.PyJWTError:  # Excepción específica de PyJWT
+    except pyjwt.PyJWTError:  # Excepción específica de PyJWT
         raise credentials_exception
     
     cursor = db.cursor(dictionary=True)

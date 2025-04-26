@@ -13,7 +13,7 @@ import sys
 import os
 import datetime
 import mysql.connector
-from bcrypt import bcrypt  # Cambiado de passlib a bcrypt
+from passlib.hash import bcrypt  # Cambiado a passlib.hash.bcrypt
 
 # Importaciones absolutas
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -22,12 +22,8 @@ from db_models import AdministradorModel
 
 def get_password_hash(password: str) -> str:
     """Genera un hash seguro de la contraseña."""
-    # Convertir password a bytes si es string
-    password_bytes = password.encode('utf-8') if isinstance(password, str) else password
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password_bytes, salt)
-    # Devolver como string para almacenar en la base de datos
-    return hashed.decode('utf-8') if isinstance(hashed, bytes) else hashed
+    # passlib maneja internamente la conversión a bytes y el salt
+    return bcrypt.hash(password)
 
 def init_db():
     """Inicializa la base de datos y crea las tablas."""

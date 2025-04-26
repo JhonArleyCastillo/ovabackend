@@ -11,7 +11,7 @@ HF_MODELO_TTS = os.getenv("HF_MODELO_TTS")
 HF_MODELO_STT = os.getenv("HF_MODELO_STT")
 HF_MODELO_IMG = os.getenv("HF_MODELO_IMG")
 HF_MODELO_SIGN = os.getenv("HF_MODELO_SIGN", "RavenOnur/Sign-Language")  
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://helpova.web.app,http://localhost:3000").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://helpova.web.app,http://localhost:3000,http://3.15.5.52:8000,http://3.15.5.52").split(",")
 CORS_MAX_AGE = int(os.getenv("CORS_MAX_AGE", "3600"))
 
 # Configuración de la base de datos
