@@ -27,10 +27,10 @@ def init_db():
     print(f"Inicializando base de datos con host: {DB_HOST}, puerto: {DB_PORT}, base de datos: {DB_NAME}")
     
     try:
-        # Verificar conexión
+        # Verificar conexión - Convertir puerto a entero
         cnx = mysql.connector.connect(
             host=DB_HOST,
-            port=DB_PORT,
+            port=int(DB_PORT),  # Convertir a entero aquí
             user=DB_USER,
             password=DB_PASSWORD
         )
