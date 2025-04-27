@@ -7,7 +7,6 @@ gestión de tokens JWT y verificación de contraseñas.
 from datetime import datetime, timedelta
 from typing import Optional, Union, Dict, Any
 import jwt as pyjwt  # Cambiado a un alias más claro
-from passlib.hash import bcrypt  # Usamos passlib.hash.bcrypt para mejor estabilidad
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import mysql.connector
@@ -17,16 +16,7 @@ from config import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from database import get_db
 import db_models as db_models
 import schemas as schemas
-from security_utils import verify_password
-
-# Definir get_password_hash directamente en auth.py para evitar la importación circular
-def get_password_hash(password: str) -> str:
-    """
-    Genera un hash seguro para una contraseña dada.
-    Retorna el hash como una cadena de texto.
-    """
-    # passlib.hash.bcrypt maneja internamente la conversión a bytes y el salt
-    return bcrypt.hash(password)
+from security_utils import verify_password, get_password_hash
 
 # Configurar OAuth2 con JWT - corregir la URL con una barra al inicio para ruta absoluta
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")

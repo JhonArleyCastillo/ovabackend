@@ -13,17 +13,14 @@ import sys
 import os
 import datetime
 import mysql.connector
-from passlib.hash import bcrypt  # Cambiado a passlib.hash.bcrypt
+import hashlib
+import secrets
+from security_utils import get_password_hash  # Importamos la función de security_utils
 
 # Importaciones absolutas
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 from db_models import AdministradorModel
-
-def get_password_hash(password: str) -> str:
-    """Genera un hash seguro de la contraseña."""
-    # passlib maneja internamente la conversión a bytes y el salt
-    return bcrypt.hash(password)
 
 def init_db():
     """Inicializa la base de datos y crea las tablas."""
@@ -88,7 +85,7 @@ def create_superadmin(cnx, email, nombre, password):
             print(f"Error: Ya existe un administrador con el correo '{email}'.")
             return False
         
-        # Hashear la contraseña
+        # Hashear la contraseña usando nuestra nueva función
         hashed_password = get_password_hash(password)
         
         # Crear el superadmin
