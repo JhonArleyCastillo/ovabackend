@@ -16,11 +16,11 @@ CORS_MAX_AGE = int(os.getenv("CORS_MAX_AGE", "3600"))
 
 # Configuración de la base de datos
 # Valores predeterminados para MySQL - Se pueden sobrescribir con variables de entorno
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "3306")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_NAME = os.getenv("DB_NAME", "ova_db")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_NAME = os.getenv("DB_NAME")
 
 # Construir DATABASE_URL para MySQL
 # Formato: mysql+mysqlconnector://usuario:contraseña@host:puerto/nombre_db

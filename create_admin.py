@@ -19,27 +19,30 @@ from security_utils import get_password_hash  # Importamos la función de securi
 
 # Importaciones absolutas
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
-from db_models import AdministradorModel
+
+# Utilizamos valores específicos para la producción en RDS
+# En lugar de usar config.py directamente
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = 3306  # Ya como entero
+DB_USER = "root"  # Debes usar tu usuario de RDS real aquí
+DB_PASSWORD = "contraseña"  # Debes usar tu contraseña de RDS real aquí
+DB_NAME = "basedatos"  # Debes usar el nombre de tu base de datos real aquí
 
 def init_db():
     """Inicializa la base de datos y crea las tablas."""
     print(f"Inicializando base de datos con host: {DB_HOST}, puerto: {DB_PORT}, base de datos: {DB_NAME}")
     
     try:
-        # Verificar conexión - Convertir puerto a entero
+        # Verificar conexión - Usamos los valores definidos arriba
         cnx = mysql.connector.connect(
             host=DB_HOST,
-            port=int(DB_PORT),  # Convertir a entero aquí
+            port=DB_PORT,  # Ya está como entero
             user=DB_USER,
             password=DB_PASSWORD
         )
         cursor = cnx.cursor()
         
-        # Crear la base de datos si no existe
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-        
-        # Seleccionar la base de datos
+        # No necesitamos crear la base de datos en RDS, solo seleccionarla
         cursor.execute(f"USE {DB_NAME}")
         
         # Crear tablas
