@@ -24,9 +24,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # En lugar de usar config.py directamente
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = 3306  # Ya como entero
-DB_USER = "root"  # Debes usar tu usuario de RDS real aquí
-DB_PASSWORD = "contraseña"  # Debes usar tu contraseña de RDS real aquí
-DB_NAME = "basedatos"  # Debes usar el nombre de tu base de datos real aquí
+DB_USER = os.getenv("DB_USER")  # Debes usar tu usuario de RDS real aquí
+DB_PASSWORD = os.getenv("DB_PASSWORD")  # Debes usar tu contraseña de RDS real aquí
+DB_NAME = os.getenv("DB_NAME") # Debes usar el nombre de tu base de datos real aquí
 
 def init_db():
     """Inicializa la base de datos y crea las tablas."""
