@@ -9,13 +9,42 @@ import mysql.connector
 from mysql.connector import pooling
 from contextlib import contextmanager
 import time
+import logging
 
-# Importación absoluta en lugar de relativa
-import os
-import sys
-# Añadir la ruta actual al path para permitir importaciones desde este directorio
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+# Configurar logger
+logger = logging.getLogger(__name__)
+
+# Intentar importar las variables desde config.py
+try:
+    from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+    logger.info("Variables de BD cargadas desde config.py")
+except (ImportError, AttributeError) as e:
+    logger.warning(f"No se pudieron cargar las variables desde config.py: {e}")
+    # Si falla, cargar directamente las variables de entorno
+    import os
+    from dotenv import load_dotenv
+    
+    def load_env():
+        """
+        Carga las variables de entorno desde el archivo .env.
+        """
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        load_dotenv(env_path)
+        logger.info("Variables de entorno cargadas como respaldo")
+    
+    # Cargar variables de entorno como respaldo
+    load_env()
+    
+    # Obtener las variables después de cargar el archivo .env
+    DB_HOST = os.getenv("DB_HOST")
+    DB_PORT = os.getenv("DB_PORT")
+    DB_USER = os.getenv("DB_USER")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_NAME = os.getenv("DB_NAME")
+
+# Verificar que las variables estén definidas
+if not all([DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME]):
+    logger.error("Variables de conexión a BD incompletas o no definidas")
 
 # Configuración del pool de conexiones
 db_config = {
@@ -35,8 +64,9 @@ try:
         pool_size=5,
         **db_config
     )
+    logger.info("Pool de conexiones creado correctamente")
 except Exception as e:
-    print(f"Error al crear el pool de conexiones: {e}")
+    logger.error(f"Error al crear el pool de conexiones: {e}")
     # Crear un objeto falso para evitar errores en tiempo de ejecución
     connection_pool = None
 
@@ -109,7 +139,7 @@ def db_session():
                 mysql.connector.errors.OperationalError) as e:
             retry_count += 1
             last_error = e
-            print(f"Error de conexión (intento {retry_count}/{max_retries}): {e}")
+            logger.warning(f"Error de conexión (intento {retry_count}/{max_retries}): {e}")
             time.sleep(1)  # Esperar antes de reintentar
     
     # Si llegamos aquí, todos los reintentos fallaron
@@ -170,8 +200,8 @@ def setup_database():
             )
             """)
             
-            print("Base de datos configurada correctamente")
+            logger.info("Base de datos configurada correctamente")
             
     except Exception as e:
-        print(f"Error al configurar la base de datos: {e}")
+        logger.error(f"Error al configurar la base de datos: {e}")
         raise
