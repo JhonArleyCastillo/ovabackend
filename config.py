@@ -1,5 +1,6 @@
 import os
 import logging
+import secrets
 # Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
 from dotenv import load_dotenv
 load_dotenv()
@@ -12,13 +13,29 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 IS_DEVELOPMENT = ENVIRONMENT == "development"
 
 # ===== Configuración de la Base de Datos =====
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME")
+# Valores específicos para desarrollo y producción
+if IS_DEVELOPMENT:
+    # Valores por defecto para desarrollo local
+    DB_HOST = os.getenv("DB_HOST", "localhost")
+    DB_PORT = int(os.getenv("DB_PORT", "3306"))
+    DB_USER = os.getenv("DB_USER", "root")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+    DB_NAME = os.getenv("DB_NAME", "ovaweb_dev")
+    
+    # SQLite como alternativa para desarrollo
+    USE_SQLITE = os.getenv("USE_SQLITE", "false").lower() == "true"
+    SQLITE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dev_database.sqlite')
+    
+    logger.info(f"Configuración de desarrollo: {'SQLite' if USE_SQLITE else 'MySQL'}")
+else:
+    # En producción se requieren todos los valores explícitamente
+    DB_HOST = os.getenv("DB_HOST")
+    DB_PORT = int(os.getenv("DB_PORT", "3306")) 
+    DB_USER = os.getenv("DB_USER")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_NAME = os.getenv("DB_NAME")
 
-if DB_HOST:
+if DB_HOST or (IS_DEVELOPMENT and USE_SQLITE):
     logger.info("Variables de base de datos cargadas correctamente")
 else:
     logger.warning("Variables de base de datos no encontradas")
