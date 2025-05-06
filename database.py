@@ -10,9 +10,17 @@ from mysql.connector import pooling
 from contextlib import contextmanager
 import time
 import logging
+import os
 
 # Configurar logger
 logger = logging.getLogger(__name__)
+
+# Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
+try:
+    from dotenv import loaded as dotenv_loaded
+    logger.info("Variables de entorno cargadas desde el módulo centralizado dotenv.py")
+except ImportError:
+    logger.warning("No se pudo importar el módulo dotenv centralizado")
 
 # Intentar importar las variables desde config.py
 try:
@@ -20,22 +28,7 @@ try:
     logger.info("Variables de BD cargadas desde config.py")
 except (ImportError, AttributeError) as e:
     logger.warning(f"No se pudieron cargar las variables desde config.py: {e}")
-    # Si falla, cargar directamente las variables de entorno
-    import os
-    from dotenv import load_dotenv
-    
-    def load_env():
-        """
-        Carga las variables de entorno desde el archivo .env.
-        """
-        env_path = os.path.join(os.path.dirname(__file__), '.env')
-        load_dotenv(env_path)
-        logger.info("Variables de entorno cargadas como respaldo")
-    
-    # Cargar variables de entorno como respaldo
-    load_env()
-    
-    # Obtener las variables después de cargar el archivo .env
+    # Si falla, obtener directamente las variables de entorno ya cargadas por dotenv.py
     DB_HOST = os.getenv("DB_HOST")
     DB_PORT = os.getenv("DB_PORT")
     DB_USER = os.getenv("DB_USER")

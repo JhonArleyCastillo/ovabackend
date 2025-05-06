@@ -7,6 +7,9 @@ import os
 # Añadir el directorio raíz del proyecto al path de Python
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
+from dotenv import loaded as dotenv_loaded
+
 # Ajustamos las importaciones para que funcionen tanto en desarrollo como en producción
 try:
     # Intenta importar directamente (estructura local)

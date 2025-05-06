@@ -1,20 +1,10 @@
-from dotenv import load_dotenv
 import os
 import logging
+# Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
+from dotenv import loaded as dotenv_loaded
 
 # Configurar logger
 logger = logging.getLogger(__name__)
-
-def load_env():
-    """
-    Carga las variables de entorno desde el archivo .env.
-    """
-    env_path = os.path.join(os.path.dirname(__file__), '.env')
-    load_dotenv(env_path)
-    logger.info("Carga de variables de entorno completada")
-
-# Cargar variables de entorno al importar el módulo
-load_env()
 
 # ===== Configuración de la Base de Datos =====
 DB_HOST = os.getenv("DB_HOST")
@@ -30,11 +20,6 @@ else:
 
 # ===== Configuración de Hugging Face =====
 HF_API_KEY = os.getenv("HF_API_KEY")  # Token de Hugging Face
-if HF_API_KEY:
-    logger.info("HF_API_KEY cargada correctamente")
-else:
-    logger.warning("HF_API_KEY no encontrada")
-
 HF_MODELO_LLM = os.getenv("HF_MODELO_LLM")
 HF_MODELO_TTS = os.getenv("HF_MODELO_TTS")
 HF_MODELO_STT = os.getenv("HF_MODELO_STT")

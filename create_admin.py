@@ -20,8 +20,10 @@ from security_utils import get_password_hash  # Importamos la función de securi
 # Importaciones absolutas
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
+from dotenv import loaded as dotenv_loaded
+
 # Utilizamos valores específicos para la producción en RDS
-# En lugar de usar config.py directamente
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = 3306  # Ya como entero
 DB_USER = os.getenv("DB_USER")  # Debes usar tu usuario de RDS real aquí
