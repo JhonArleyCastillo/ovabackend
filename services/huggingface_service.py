@@ -1,6 +1,6 @@
 from huggingface_hub import InferenceClient
 # Cambiado a importación absoluta desde backend
-from backend.config import HF_API_KEY
+from config import HF_API_KEY
 import logging
 import os
 from dotenv import load_dotenv
