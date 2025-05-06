@@ -18,10 +18,10 @@ try:
 except ImportError:
     # Si falla, intenta importar como parte del paquete backend (estructura en EC2)
     from config import ALLOWED_ORIGINS, CORS_MAX_AGE
-    from backend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router
-    from backend.logging_config import configure_logging
-    from backend.database import setup_database
-    import backend.db_models as db_models
+    from routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router
+    from logging_config import configure_logging
+    from database import setup_database
+    import db_models as db_models
 
 # Configurar logging
 logger = logging.getLogger(__name__)
