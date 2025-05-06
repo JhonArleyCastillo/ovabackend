@@ -6,6 +6,10 @@ from dotenv import loaded as dotenv_loaded
 # Configurar logger
 logger = logging.getLogger(__name__)
 
+# ===== Configuración del Entorno =====
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_DEVELOPMENT = ENVIRONMENT == "development"
+
 # ===== Configuración de la Base de Datos =====
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")

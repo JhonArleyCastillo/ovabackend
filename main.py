@@ -7,31 +7,16 @@ import os
 # Añadir el directorio raíz del proyecto al path de Python
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
-from dotenv import loaded as dotenv_loaded
-
-# Ajustamos las importaciones para que funcionen tanto en desarrollo como en producción
-try:
-    # Intenta importar directamente (estructura local)
-    from config import ALLOWED_ORIGINS, CORS_MAX_AGE
-    from routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router
-    from logging_config import configure_logging
-    from database import setup_database
-    import db_models
-except ImportError:
-    # Si falla, intenta importar como parte del paquete backend (estructura en EC2)
-    from config import ALLOWED_ORIGINS, CORS_MAX_AGE
-    from routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router
-    from logging_config import configure_logging
-    from database import setup_database
-    import db_models as db_models
+# Importaciones de la aplicación
+from backend.config import ALLOWED_ORIGINS, CORS_MAX_AGE, IS_DEVELOPMENT
+from backend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router
+from backend.logging_config import configure_logging
+from backend.database import setup_database
+import backend.db_models as db_models
 
 # Configurar logging
 logger = logging.getLogger(__name__)
 configure_logging()
-
-# Determinar el entorno (desarrollo o producción)
-IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development") == "development"
 
 app = FastAPI(
     title="API Asistente Inteligente Multimodal",

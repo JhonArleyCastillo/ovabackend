@@ -1,8 +1,8 @@
 """
 Script para crear un administrador en el sistema OVA.
 
-Este script inicializa la base de datos (si es necesario) y crea un usuario
-administrador con privilegios de superadministrador.
+Este script utiliza la infraestructura existente de la aplicación para crear
+un usuario administrador con privilegios de superadministrador.
 
 Uso:
     python create_admin.py --email admin@ejemplo.com --nombre "Nombre Admin" --password "contraseña"
@@ -11,100 +11,53 @@ Uso:
 import argparse
 import sys
 import os
-import datetime
-import mysql.connector
-import hashlib
-import secrets
-from security_utils import get_password_hash  # Importamos la función de security_utils
 
 # Importaciones absolutas
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
-from dotenv import loaded as dotenv_loaded
+# Importar las dependencias necesarias de la aplicación
+from database import db_session, setup_database
+from db_models import AdministradorModel
+from security_utils import get_password_hash
+# Importar config para asegurarnos de que todas las variables de entorno estén disponibles
+import config
 
-# Utilizamos valores específicos para la producción en RDS
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = 3306  # Ya como entero
-DB_USER = os.getenv("DB_USER")  # Debes usar tu usuario de RDS real aquí
-DB_PASSWORD = os.getenv("DB_PASSWORD")  # Debes usar tu contraseña de RDS real aquí
-DB_NAME = os.getenv("DB_NAME") # Debes usar el nombre de tu base de datos real aquí
-
-def init_db():
-    """Inicializa la base de datos y crea las tablas."""
-    print(f"Inicializando base de datos con host: {DB_HOST}, puerto: {DB_PORT}, base de datos: {DB_NAME}")
-    
-    try:
-        # Verificar conexión - Usamos los valores definidos arriba
-        cnx = mysql.connector.connect(
-            host=DB_HOST,
-            port=DB_PORT,  # Ya está como entero
-            user=DB_USER,
-            password=DB_PASSWORD
-        )
-        cursor = cnx.cursor()
-        
-        # No necesitamos crear la base de datos en RDS, solo seleccionarla
-        cursor.execute(f"USE {DB_NAME}")
-        
-        # Crear tablas
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS administradores (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            email VARCHAR(255) UNIQUE,
-            nombre VARCHAR(100),
-            hashed_password VARCHAR(255),
-            es_superadmin BOOLEAN DEFAULT FALSE,
-            activo BOOLEAN DEFAULT TRUE,
-            INDEX (email)
-        )
-        """)
-        
-        # Verificar tablas creadas
-        cursor.execute("SHOW TABLES")
-        tables = [table[0] for table in cursor]
-        print(f"Tablas en la base de datos: {', '.join(tables)}")
-        
-        return cnx
-    except mysql.connector.Error as err:
-        print(f"Error al inicializar la base de datos: {err}")
-        sys.exit(1)
-
-def create_superadmin(cnx, email, nombre, password):
+def create_superadmin(email, nombre, password):
     """
     Crea un superadministrador en la base de datos.
     
     Args:
-        cnx: Conexión a MySQL
         email: Correo electrónico del administrador
         nombre: Nombre completo del administrador
         password: Contraseña en texto plano (será hasheada)
+        
+    Returns:
+        bool: True si se creó con éxito, False en caso contrario
     """
-    cursor = cnx.cursor(dictionary=True)
-    
     try:
-        # Verificar si ya existe un admin con este correo
-        cursor.execute("SELECT * FROM administradores WHERE email = %s", (email,))
-        existing_admin = cursor.fetchone()
+        # Primero, verificar si ya existe un admin con este correo
+        with db_session() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM administradores WHERE email = %s", (email,))
+            existing_admin = cursor.fetchone()
+            
         if existing_admin:
             print(f"Error: Ya existe un administrador con el correo '{email}'.")
             return False
         
-        # Hashear la contraseña usando nuestra nueva función
-        hashed_password = get_password_hash(password)
+        # Crear el superadmin usando el modelo existente
+        admin_id = AdministradorModel.crear(
+            nombre=nombre,
+            email=email,
+            password=password,
+            es_superadmin=True
+        )
         
-        # Crear el superadmin
-        cursor.execute("""
-        INSERT INTO administradores (email, nombre, hashed_password, es_superadmin, activo)
-        VALUES (%s, %s, %s, %s, %s)
-        """, (email, nombre, hashed_password, True, True))
-        
-        cnx.commit()
-        nuevo_admin_id = cursor.lastrowid
-        
-        # Obtener el admin creado
-        cursor.execute("SELECT * FROM administradores WHERE id = %s", (nuevo_admin_id,))
-        nuevo_admin = cursor.fetchone()
+        # Obtener el admin creado para mostrar información
+        with db_session() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM administradores WHERE id = %s", (admin_id,))
+            nuevo_admin = cursor.fetchone()
         
         print(f"\n¡Superadministrador creado con éxito!")
         print(f"ID: {nuevo_admin['id']}")
@@ -115,10 +68,7 @@ def create_superadmin(cnx, email, nombre, password):
         return True
     except Exception as e:
         print(f"Error al crear el superadministrador: {str(e)}")
-        cnx.rollback()
         return False
-    finally:
-        cursor.close()
 
 def main():
     """Función principal del script."""
@@ -129,14 +79,17 @@ def main():
     
     args = parser.parse_args()
     
-    # Inicializar la base de datos
-    cnx = init_db()
+    # Asegurar que la base de datos esté correctamente configurada
+    try:
+        print("Verificando la configuración de la base de datos...")
+        setup_database()
+        print("Base de datos verificada correctamente.")
+    except Exception as e:
+        print(f"Error al verificar la base de datos: {str(e)}")
+        sys.exit(1)
     
     # Crear el superadmin
-    success = create_superadmin(cnx, args.email, args.nombre, args.password)
-    
-    # Cerrar la conexión
-    cnx.close()
+    success = create_superadmin(args.email, args.nombre, args.password)
     
     # Salir con código de estado apropiado
     sys.exit(0 if success else 1)

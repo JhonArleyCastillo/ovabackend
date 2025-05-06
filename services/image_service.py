@@ -5,12 +5,16 @@ from .huggingface_service import hf_client
 import cv2 # Asegurarse que cv2 está importado
 from PIL import Image
 
+# Importar modelos desde config
+from backend.config import HF_MODELO_SIGN
+
 logger = logging.getLogger(__name__)
 
-# Reemplazar con los nombres reales de los modelos que estás usando
-DEFAULT_SIGN_LANGUAGE_MODEL = "facebook/wav2vec2-large-xlsr-53-spanish-with-lm" # Ejemplo
-DEFAULT_OBJECT_DETECTION_MODEL = "facebook/detr-resnet-50" # Ejemplo
-DEFAULT_IMAGE_CAPTIONING_MODEL = "nlpconnect/vit-gpt2-image-captioning" # Ejemplo
+# Usar variables de entorno para los modelos
+DEFAULT_SIGN_LANGUAGE_MODEL = HF_MODELO_SIGN  # Usa el modelo específico de señas
+# Para modelos no definidos en .env, mantener valores por defecto
+DEFAULT_OBJECT_DETECTION_MODEL = "facebook/detr-resnet-50"  # Ejemplo
+DEFAULT_IMAGE_CAPTIONING_MODEL = "nlpconnect/vit-gpt2-image-captioning"  # Ejemplo
 
 async def analyze_image(image: Image.Image) -> dict:
     """

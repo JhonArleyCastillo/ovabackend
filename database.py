@@ -10,30 +10,12 @@ from mysql.connector import pooling
 from contextlib import contextmanager
 import time
 import logging
-import os
 
 # Configurar logger
 logger = logging.getLogger(__name__)
 
-# Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
-try:
-    from dotenv import loaded as dotenv_loaded
-    logger.info("Variables de entorno cargadas desde el módulo centralizado dotenv.py")
-except ImportError:
-    logger.warning("No se pudo importar el módulo dotenv centralizado")
-
-# Intentar importar las variables desde config.py
-try:
-    from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
-    logger.info("Variables de BD cargadas desde config.py")
-except (ImportError, AttributeError) as e:
-    logger.warning(f"No se pudieron cargar las variables desde config.py: {e}")
-    # Si falla, obtener directamente las variables de entorno ya cargadas por dotenv.py
-    DB_HOST = os.getenv("DB_HOST")
-    DB_PORT = os.getenv("DB_PORT")
-    DB_USER = os.getenv("DB_USER")
-    DB_PASSWORD = os.getenv("DB_PASSWORD")
-    DB_NAME = os.getenv("DB_NAME")
+# Importar las variables de configuración directamente desde config.py
+from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 
 # Verificar que las variables estén definidas
 if not all([DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME]):
@@ -42,7 +24,7 @@ if not all([DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME]):
 # Configuración del pool de conexiones
 db_config = {
     'host': DB_HOST,
-    'port': DB_PORT,
+    'port': int(DB_PORT),
     'user': DB_USER,
     'password': DB_PASSWORD,
     'database': DB_NAME,
@@ -77,11 +59,11 @@ def get_db():
         return items
     """
     if connection_pool is None:
-        # Si no hay pool, intentar crear una conexión directa
-        conn = mysql.connector.connect(**db_config)
-    else:
-        # Obtener una conexión del pool
-        conn = connection_pool.get_connection()
+        # Fallar rápidamente si el pool no está disponible
+        raise RuntimeError("El pool de conexiones de base de datos no está disponible.")
+    
+    # Obtener una conexión del pool
+    conn = connection_pool.get_connection()
     
     try:
         yield conn
@@ -103,24 +85,24 @@ def db_session():
         cursor.execute("SELECT * FROM items")
         items = cursor.fetchall()
     """
+    # Verificar si el pool está disponible antes de intentar conexiones
+    if connection_pool is None:
+        raise RuntimeError("El pool de conexiones de base de datos no está disponible.")
+    
     max_retries = 3
     retry_count = 0
     last_error = None
     
     while retry_count < max_retries:
         try:
-            if connection_pool is None:
-                # Si no hay pool, intentar crear una conexión directa
-                conn = mysql.connector.connect(**db_config)
-            else:
-                # Obtener una conexión del pool
-                conn = connection_pool.get_connection()
+            # Obtener una conexión del pool
+            conn = connection_pool.get_connection()
                 
             try:
                 yield conn
                 conn.commit()
                 return
-            except Exception as e:
+            except mysql.connector.Error as e:
                 conn.rollback()
                 last_error = e
                 raise
@@ -136,7 +118,7 @@ def db_session():
             time.sleep(1)  # Esperar antes de reintentar
     
     # Si llegamos aquí, todos los reintentos fallaron
-    raise Exception(f"No se pudo establecer conexión después de {max_retries} intentos: {last_error}")
+    raise mysql.connector.errors.OperationalError(f"No se pudo establecer conexión después de {max_retries} intentos: {last_error}")
 
 def setup_database():
     """

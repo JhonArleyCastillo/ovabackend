@@ -15,6 +15,7 @@ import mysql.connector
 from config import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from database import get_db
 import db_models as db_models
+from db_models import SesionAdminModel
 import schemas as schemas
 from security_utils import verify_password, get_password_hash
 
@@ -59,24 +60,32 @@ def register_admin_session(
 ) -> Dict[str, Any]:
     """
     Registra una nueva sesión de administrador.
+    
+    Args:
+        db: Conexión a la base de datos (no utilizada pero mantenida por compatibilidad).
+        admin_id: ID del administrador.
+        token: Token de la sesión.
+        ip_address: Dirección IP.
+        navegador: Información del navegador.
+        
+    Returns:
+        Diccionario con los datos de la sesión creada.
     """
+    # Calcular la fecha de expiración
     expires = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    cursor = db.cursor(dictionary=True)
-    cursor.execute("""
-    INSERT INTO sesiones_admin 
-    (admin_id, token, fecha_expiracion, ip_address, navegador, activa)
-    VALUES (%s, %s, %s, %s, %s, %s)
-    """, (admin_id, token, expires, ip_address, navegador, True))
+    # Usar SesionAdminModel para crear la sesión
+    session_id = SesionAdminModel.crear(
+        admin_id=admin_id,
+        token=token,
+        fecha_expiracion=expires,
+        ip_address=ip_address,
+        navegador=navegador,
+        activa=True
+    )
     
-    db.commit()
-    session_id = cursor.lastrowid
-    
-    # Obtener la sesión creada
-    cursor.execute("SELECT * FROM sesiones_admin WHERE id = %s", (session_id,))
-    session = cursor.fetchone()
-    cursor.close()
-    
+    # Obtener y devolver la sesión creada
+    session = SesionAdminModel.obtener_por_id(session_id)
     return session
 
 async def get_current_admin(

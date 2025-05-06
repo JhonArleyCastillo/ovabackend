@@ -275,6 +275,38 @@ class SesionAdminModel:
             return resultado
     
     @staticmethod
+    def obtener_por_id(session_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene una sesión por su ID.
+        
+        Args:
+            session_id: ID de la sesión.
+            
+        Returns:
+            Diccionario con los datos de la sesión o None si no existe.
+        """
+        sql = """
+        SELECT s.id, s.admin_id, s.token, s.fecha_inicio, s.fecha_expiracion, 
+               s.ip_address, s.navegador, s.activa, 
+               a.email as admin_email, a.nombre as admin_nombre, 
+               a.es_superadmin as admin_es_superadmin
+        FROM sesiones_admin s
+        JOIN administradores a ON s.admin_id = a.id
+        WHERE s.id = %s
+        """
+        
+        with db_session() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(sql, (session_id,))
+            resultado = cursor.fetchone()
+            
+            if resultado:
+                resultado['activa'] = bool(resultado['activa'])
+                resultado['admin_es_superadmin'] = bool(resultado['admin_es_superadmin'])
+                
+            return resultado
+    
+    @staticmethod
     def obtener_sesiones_activas(admin_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Obtiene todas las sesiones activas.
@@ -291,15 +323,15 @@ class SesionAdminModel:
                a.email as admin_email, a.nombre as admin_nombre
         FROM sesiones_admin s
         JOIN administradores a ON s.admin_id = a.id
-        WHERE s.activa = 1 AND s.fecha_expiracion > NOW()
+        WHERE s.activa = %s AND s.fecha_expiracion > NOW()
         """
         
         if admin_id is not None:
             sql = f"{sql_base} AND s.admin_id = %s ORDER BY s.fecha_inicio DESC"
-            params = (admin_id,)
+            params = (True, admin_id)
         else:
             sql = f"{sql_base} ORDER BY s.fecha_inicio DESC"
-            params = ()
+            params = (True,)
             
         with db_session() as conn:
             cursor = conn.cursor(dictionary=True)
@@ -325,8 +357,8 @@ class SesionAdminModel:
         with db_session() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-            UPDATE sesiones_admin SET activa = 0 WHERE token = %s
-            """, (token,))
+            UPDATE sesiones_admin SET activa = %s WHERE token = %s
+            """, (False, token))
             return cursor.rowcount > 0
     
     @staticmethod
@@ -343,9 +375,9 @@ class SesionAdminModel:
         with db_session() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-            UPDATE sesiones_admin SET activa = 0 
-            WHERE admin_id = %s AND activa = 1
-            """, (admin_id,))
+            UPDATE sesiones_admin SET activa = %s 
+            WHERE admin_id = %s AND activa = %s
+            """, (False, admin_id, True))
             return cursor.rowcount
     
     @staticmethod
@@ -359,9 +391,9 @@ class SesionAdminModel:
         with db_session() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-            UPDATE sesiones_admin SET activa = 0 
-            WHERE fecha_expiracion < NOW() AND activa = 1
-            """)
+            UPDATE sesiones_admin SET activa = %s 
+            WHERE fecha_expiracion < NOW() AND activa = %s
+            """, (False, True))
             return cursor.rowcount
 
 class ContactoModel:
