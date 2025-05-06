@@ -1,38 +1,42 @@
 """
-Utility functions for security-related operations like password hashing.
+Utilidades de seguridad para la aplicación.
+Este archivo proporciona funciones para el hash y verificación de contraseñas.
 """
 
-import hashlib
-import secrets
+import bcrypt
+import logging
 
-# Constant salt prefix - se puede cambiar por uno más seguro y personalizado
-SALT_PREFIX = "OVASecureSalt_"
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Verifica si una contraseña plana coincide con una contraseña hasheada.
-    """
-    # El formato de la contraseña hasheada es: salt:hash
-    if ":" not in hashed_password:
-        return False
-        
-    salt, stored_hash = hashed_password.split(":", 1)
-    # Calcular el hash de la contraseña plana con la misma sal
-    computed_hash = hashlib.sha256((salt + plain_password).encode()).hexdigest()
-    
-    # Comparar el hash calculado con el almacenado
-    return secrets.compare_digest(computed_hash, stored_hash)
+logger = logging.getLogger(__name__)
 
 def get_password_hash(password: str) -> str:
     """
-    Genera un hash seguro para una contraseña dada.
-    Retorna el hash como una cadena de texto en formato salt:hash
+    Genera un hash para una contraseña.
+    
+    Args:
+        password: Contraseña en texto plano.
+        
+    Returns:
+        Hash de la contraseña.
     """
-    # Generar una sal única para esta contraseña
-    salt = SALT_PREFIX + secrets.token_hex(8)
+    password_bytes = password.encode('utf-8')
+    hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
+    return hashed.decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verifica si una contraseña en texto plano corresponde a un hash.
     
-    # Generar el hash SHA-256 de la combinación de sal y contraseña
-    hashed = hashlib.sha256((salt + password).encode()).hexdigest()
-    
-    # Devolver la combinación de sal y hash separados por dos puntos
-    return f"{salt}:{hashed}"
+    Args:
+        plain_password: Contraseña en texto plano.
+        hashed_password: Hash de la contraseña.
+        
+    Returns:
+        True si la contraseña es correcta, False en caso contrario.
+    """
+    try:
+        password_bytes = plain_password.encode('utf-8')
+        hashed_bytes = hashed_password.encode('utf-8')
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
+    except Exception as e:
+        logger.error(f"Error al verificar contraseña: {str(e)}")
+        return False

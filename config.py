@@ -1,7 +1,8 @@
 import os
 import logging
 # Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
-from dotenv import loaded as dotenv_loaded
+from dotenv import load_dotenv
+load_dotenv()
 
 # Configurar logger
 logger = logging.getLogger(__name__)
