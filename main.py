@@ -17,7 +17,7 @@ try:
     import db_models
 except ImportError:
     # Si falla, intenta importar como parte del paquete backend (estructura en EC2)
-    from backend.config import ALLOWED_ORIGINS, CORS_MAX_AGE
+    from config import ALLOWED_ORIGINS, CORS_MAX_AGE
     from backend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router
     from backend.logging_config import configure_logging
     from backend.database import setup_database
