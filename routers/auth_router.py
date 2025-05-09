@@ -64,7 +64,9 @@ async def login(
         navegador=user_agent
     )
     
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, 
+            "token_type": "bearer",
+            "es_superadmin": admin["es_superadmin"]}
 
 @router.post("/admins/", response_model=schemas.AdminResponse)
 async def crear_admin(
