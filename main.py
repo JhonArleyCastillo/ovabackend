@@ -40,6 +40,12 @@ if IS_DEVELOPMENT:
     # En desarrollo podemos ser un poco más permisivos con los headers
     allowed_headers.append("*")
 
+# Registrar información detallada sobre configuración CORS
+logger.info(f"Configurando CORS con {len(ALLOWED_ORIGINS)} orígenes permitidos")
+for origin in ALLOWED_ORIGINS:
+    if not IS_DEVELOPMENT and not (origin.startswith("https://") or "localhost" in origin):
+        logger.warning(f"Origen inseguro en producción: {origin}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,

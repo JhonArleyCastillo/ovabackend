@@ -49,9 +49,20 @@ HF_MODELO_IMG = os.getenv("HF_MODELO_IMG")
 HF_MODELO_SIGN = os.getenv("HF_MODELO_SIGN", "RavenOnur/Sign-Language")
 
 # ===== Configuración de CORS =====
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", 
+# Definir orígenes permitidos según el entorno
+_raw_origins = os.getenv("ALLOWED_ORIGINS", 
                           "https://helpova.web.app,http://localhost:3000,https://3.15.5.52,https://3.15.5.52:8000," + 
                           "https://api.ovaonline.tech,http://api.ovaonline.tech").split(",")
+
+# En producción, filtrar para permitir solo orígenes HTTPS (excepto localhost)
+if not IS_DEVELOPMENT:
+    ALLOWED_ORIGINS = [origin for origin in _raw_origins if origin.startswith("https://") or "localhost" in origin]
+    # Registrar los orígenes filtrados
+    logger.info(f"Modo producción: Filtrando orígenes para permitir solo HTTPS: {ALLOWED_ORIGINS}")
+else:
+    ALLOWED_ORIGINS = _raw_origins
+    logger.info(f"Modo desarrollo: Permitiendo todos los orígenes configurados: {ALLOWED_ORIGINS}")
+
 CORS_MAX_AGE = int(os.getenv("CORS_MAX_AGE", "3600"))
 
 # ===== Configuración JWT =====
