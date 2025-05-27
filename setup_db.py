@@ -7,8 +7,8 @@ Este script configura las tablas necesarias y crea un administrador inicial.
 import argparse
 import sys
 import os
-from database import setup_database, db_session
-from db_models import AdministradorModel
+from backend.database import setup_database, db_session
+from backend.db_models import AdministradorModel
 
 def crear_admin_inicial(nombre: str, email: str, password: str):
     """

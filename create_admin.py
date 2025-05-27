@@ -16,8 +16,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Importar las dependencias necesarias de la aplicación
-from database import db_session, setup_database
-from db_models import AdministradorModel
+from backend.database import db_session, setup_database
+from backend.db_models import AdministradorModel
 from security_utils import get_password_hash
 # Importar config para asegurarnos de que todas las variables de entorno estén disponibles
 import config

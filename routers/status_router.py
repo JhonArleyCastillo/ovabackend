@@ -6,8 +6,8 @@ import sys
 import platform
 import psutil
 # Importar las rutas definidas
-from routes import STATUS_ROUTE
-from services.huggingface_service import verify_hf_connection
+from backend.routes import STATUS_ROUTE
+from backend.services.huggingface_service import HuggingFaceService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

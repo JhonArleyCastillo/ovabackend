@@ -12,10 +12,10 @@ from fastapi.security import OAuth2PasswordBearer
 import mysql.connector
 
 # Cambiado a importaciones relativas
-from config import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from database import get_db
+from backend.config import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from backend.database import get_db
 import db_models as db_models
-from db_models import SesionAdminModel
+from backend.db_models import SesionAdminModel
 import schemas as schemas
 from security_utils import get_password_hash, verify_password
 

@@ -2,12 +2,12 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, File, UploadFile
 import logging
 import json
 import uuid
-from services.chat_service import get_llm_response
-from services.audio_service import speech_to_text, text_to_speech
-from utils import encode_audio_to_base64, create_error_response
+from backend.services.chat_service import get_llm_response
+from backend.services.audio_service import speech_to_text, text_to_speech
+from backend.utils import encode_audio_to_base64, create_error_response
 from fastapi.responses import JSONResponse
-from routes import WS_DETECT_AUDIO, WS_CHAT
-from models import TextMessage, AudioMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
+from backend.routes import WS_DETECT_AUDIO, WS_CHAT
+from backend.models import TextMessage, AudioMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

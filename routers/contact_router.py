@@ -9,10 +9,10 @@ Este router maneja las operaciones relacionadas con los mensajes de contacto:
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 import mysql.connector
-from database import get_db
-from auth import get_current_admin
+from backend.database import get_db
+from backend.auth import get_current_admin
 import schemas
-from db_models import ContactoModel
+from backend.db_models import ContactoModel
 
 router = APIRouter(
     prefix="/api/contacto",

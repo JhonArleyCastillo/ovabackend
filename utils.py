@@ -11,9 +11,9 @@ import cv2
 import logging
 import argparse
 import sys
-from database import db_session
-from db_models import AdministradorModel
-from auth import get_password_hash
+from backend.database import db_session
+from backend.db_models import AdministradorModel
+from backend.auth import get_password_hash
 
 # Configurar logging básico
 logging.basicConfig(level=logging.INFO)

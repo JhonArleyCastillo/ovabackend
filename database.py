@@ -18,11 +18,11 @@ from importlib import import_module
 logger = logging.getLogger(__name__)
 
 # Importar las variables de configuración directamente desde config.py
-from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, IS_DEVELOPMENT
+from backend.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, IS_DEVELOPMENT
 
 # Comprobar si estamos en entorno de desarrollo con SQLite
 try:
-    from config import USE_SQLITE, SQLITE_PATH
+    from backend.config import USE_SQLITE, SQLITE_PATH
 except ImportError:
     USE_SQLITE = False
 

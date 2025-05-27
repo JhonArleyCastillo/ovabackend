@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 # Importaciones de la aplicación
 from backend.config import ALLOWED_ORIGINS, CORS_MAX_AGE, IS_DEVELOPMENT
-from backend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router
+from backend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router, resilience_router
 from backend.logging_config import configure_logging
 from backend.database import setup_database
 import backend.db_models as db_models
@@ -67,6 +67,8 @@ app.include_router(auth_router.router)
 app.include_router(usuarios_router.router)
 # Nuevo router para el formulario de contacto
 app.include_router(contact_router.router)
+# Router para monitoreo de resiliencia
+app.include_router(resilience_router.resilience_router, tags=["Resiliencia"])
 
 @app.on_event("startup")
 async def startup_event():

@@ -24,7 +24,7 @@ def check_mysql_connection():
     """Verifica si podemos conectarnos a MySQL con las credenciales actuales."""
     try:
         import mysql.connector
-        from config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD
+        from backend.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD
         
         conn = mysql.connector.connect(
             host=DB_HOST,
@@ -132,8 +132,8 @@ def test_database_setup():
     banner("Probando configuración de Base de Datos")
     try:
         # Importar solo después de que se hayan actualizado las variables de entorno
-        from config import IS_DEVELOPMENT, USE_SQLITE
-        from database import setup_database
+        from backend.config import IS_DEVELOPMENT, USE_SQLITE
+        from backend.database import setup_database
         
         print(f"Entorno: {'Desarrollo' if IS_DEVELOPMENT else 'Producción'}")
         print(f"Usando SQLite: {'Sí' if USE_SQLITE else 'No'}")
@@ -190,7 +190,7 @@ def main():
         success = test_database_setup()
         if not success:
             # Verificar si el problema es MySQL
-            from config import USE_SQLITE
+            from backend.config import USE_SQLITE
             if not USE_SQLITE and not check_mysql_connection():
                 show_help_for_missing_mysql()
     
