@@ -3,7 +3,7 @@ Router para monitoreo de patrones de resiliencia.
 Proporciona endpoints para verificar el estado de los servicios y circuit breakers.
 """
 from fastapi import APIRouter, HTTPException
-from backend.services.resilience_service import resilience_service
+from backend.services.resilience_service import ResilienceService
 from backend.services.huggingface_service import verify_hf_connection_async
 import logging
 import asyncio
@@ -24,7 +24,7 @@ async def health_check():
             "services": {
                 "huggingface": "up" if hf_status else "down"
             },
-            "circuit_breakers": resilience_service.get_circuit_breaker_status()
+            "circuit_breakers": ResilienceService.get_circuit_breaker_status()
         }
     except Exception as e:
         logger.error(f"Error en health check: {e}")
@@ -41,7 +41,7 @@ async def resilience_status():
                 "timeout": "enabled",
                 "fallback": "enabled"
             },
-            "circuit_breakers": resilience_service.get_circuit_breaker_status()
+            "circuit_breakers": ResilienceService.get_circuit_breaker_status()
         }
     except Exception as e:
         logger.error(f"Error obteniendo estado de resiliencia: {e}")
@@ -69,11 +69,11 @@ async def test_resilience():
 async def reset_circuit_breaker():
     """Endpoint para resetear el circuit breaker manualmente."""
     try:
-        resilience_service.reset_circuit_breaker()
+        ResilienceService.reset_circuit_breaker()
         return {
             "status": "success",
             "message": "Circuit breaker reseteado exitosamente",
-            "circuit_breaker_status": resilience_service.get_circuit_breaker_status()
+            "circuit_breaker_status": ResilienceService.get_circuit_breaker_status()
         }
     except Exception as e:
         logger.error(f"Error reseteando circuit breaker: {e}")

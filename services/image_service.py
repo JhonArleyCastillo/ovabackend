@@ -1,22 +1,19 @@
 import logging
 import numpy as np
 import asyncio
-# Cambiado a importación relativa
-from .huggingface_service import hf_client, hf_client_async
-from .resilience_service import ResilienceService
-import cv2 # Asegurarse que cv2 está importado
+import cv2
 from PIL import Image
 
-# Importar modelos desde config
+from .huggingface_service import hf_client, hf_client_async
+from .resilience_service import ResilienceService
 from backend.config import HF_MODELO_SIGN
 
 logger = logging.getLogger(__name__)
 
-# Usar variables de entorno para los modelos
-DEFAULT_SIGN_LANGUAGE_MODEL = HF_MODELO_SIGN  # Usa el modelo específico de señas
-# Para modelos no definidos en .env, mantener valores por defecto
-DEFAULT_OBJECT_DETECTION_MODEL = "facebook/detr-resnet-50"  # Ejemplo
-DEFAULT_IMAGE_CAPTIONING_MODEL = "nlpconnect/vit-gpt2-image-captioning"  # Ejemplo
+# Configuración de modelos
+DEFAULT_SIGN_LANGUAGE_MODEL = HF_MODELO_SIGN
+DEFAULT_OBJECT_DETECTION_MODEL = "facebook/detr-resnet-50"
+DEFAULT_IMAGE_CAPTIONING_MODEL = "nlpconnect/vit-gpt2-image-captioning"
 
 @ResilienceService.resilient_hf_call(
     timeout_seconds=60.0,

@@ -168,16 +168,10 @@ class ResilienceService:
             "failure_threshold": ResilienceService._circuit_breaker_state["failure_threshold"],
             "last_failure_time": ResilienceService._circuit_breaker_state["last_failure_time"],
             "recovery_timeout": ResilienceService._circuit_breaker_state["recovery_timeout"]
-        }
-
-    @staticmethod
+        }    @staticmethod
     def reset_circuit_breaker():
         """Resetea el circuit breaker manualmente."""
         ResilienceService._circuit_breaker_state["failure_count"] = 0
         ResilienceService._circuit_breaker_state["is_open"] = False
         ResilienceService._circuit_breaker_state["last_failure_time"] = None
         logger.info("Circuit breaker reseteado manualmente")
-
-
-# Instancia global del servicio
-resilience_service = ResilienceService()
