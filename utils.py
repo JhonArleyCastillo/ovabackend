@@ -1,6 +1,4 @@
-"""
-Utilidades y herramientas para la aplicación.
-
+"""Utilidades y herramientas para la aplicación.
 Este archivo contiene funciones de utilidad para diversas tareas como
 configuración inicial, herramientas de mantenimiento, etc.
 """

@@ -14,10 +14,10 @@ import mysql.connector
 # Cambiado a importaciones relativas
 from backend.config import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from backend.database import get_db
-import db_models as db_models
+import backend.db_models as db_models
 from backend.db_models import SesionAdminModel
-import schemas as schemas
-from security_utils import get_password_hash, verify_password
+import backend.schemas as schemas
+from backend.security_utils import get_password_hash, verify_password
 
 # Configurar OAuth2 con JWT - corregir la URL con una barra al inicio para ruta absoluta
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")

@@ -1,29 +1,8 @@
 from huggingface_hub import InferenceClient
+from backend.config import HF_API_KEY
+from .resilience_service import ResilienceService
 import logging
 import asyncio
-
-# Importación segura de configuración
-try:
-    from backend.config import HF_API_KEY
-except ImportError:
-    HF_API_KEY = None
-
-try:
-    from .resilience_service import ResilienceService
-except ImportError:
-    # Fallback para cuando no se pueda importar resilience_service
-    class ResilienceService:
-        @staticmethod
-        def simple_retry(attempts=3, delay=2.0):
-            def decorator(func):
-                return func
-            return decorator
-        
-        @staticmethod
-        def resilient_hf_call(timeout_seconds=30.0, retry_attempts=3, fallback_response=None):
-            def decorator(func):
-                return func
-            return decorator
 
 logger = logging.getLogger(__name__)
 
@@ -31,38 +10,56 @@ class HuggingFaceService:
     _client = None
 
     @classmethod
-    def get_client(cls) -> InferenceClient:
-        """Obtiene o inicializa el cliente de inferencia de Hugging Face."""
-        if cls._client is None:
-            if not HF_API_KEY:
-                logger.warning("API key de Hugging Face no configurada. Usando modo simulación.")
-                # Para testing sin API key, crear un cliente sin autenticación
-                cls._client = InferenceClient()
-            else:
-                try:
-                    cls._client = InferenceClient(api_key=HF_API_KEY)
-                    logger.info("Cliente de Hugging Face inicializado con éxito.")
-                except Exception as e:
-                    logger.error(f"Error al inicializar el cliente de Hugging Face: {e}")
-                    raise ConnectionError(f"No se pudo inicializar el cliente de HF: {e}")
-        return cls._client
-
-    @classmethod
     @ResilienceService.simple_retry(attempts=3, delay=2.0)
     async def get_client_async(cls) -> InferenceClient:
         """Obtiene o inicializa el cliente de inferencia de Hugging Face de forma async."""
         if cls._client is None:
             if not HF_API_KEY:
-                logger.warning("API key de Hugging Face no configurada. Usando modo simulación.")
-                cls._client = InferenceClient()
-            else:
-                try:
-                    cls._client = InferenceClient(api_key=HF_API_KEY)
-                    logger.info("Cliente de Hugging Face inicializado con éxito.")
-                except Exception as e:
-                    logger.error(f"Error al inicializar el cliente de Hugging Face: {e}")
-                    raise ConnectionError(f"No se pudo inicializar el cliente de HF: {e}")
+                logger.error("API key de Hugging Face no configurada correctamente.")
+                raise ValueError("API key de Hugging Face no configurada")
+                
+            try:
+                cls._client = InferenceClient(api_key=HF_API_KEY)
+                logger.info("Cliente de Hugging Face inicializado con éxito.")
+            except Exception as e:
+                logger.error(f"Error al inicializar el cliente de Hugging Face: {e}")
+                raise ConnectionError(f"No se pudo inicializar el cliente de HF: {e}")
         return cls._client
+
+    @classmethod
+    def get_client(cls) -> InferenceClient:
+        """Obtiene o inicializa el cliente de inferencia de Hugging Face."""
+        if cls._client is None:
+            if not HF_API_KEY:
+                logger.error("API key de Hugging Face no configurada correctamente.")
+                raise ValueError("API key de Hugging Face no configurada")
+                
+            try:
+                cls._client = InferenceClient(api_key=HF_API_KEY)
+                logger.info("Cliente de Hugging Face inicializado con éxito.")
+            except Exception as e:
+                logger.error(f"Error al inicializar el cliente de Hugging Face: {e}")
+                raise ConnectionError(f"No se pudo inicializar el cliente de HF: {e}")
+        return cls._client
+
+    @classmethod
+    @ResilienceService.resilient_hf_call(
+        timeout_seconds=30.0,
+        retry_attempts=3,
+        fallback_response=None
+    )
+    async def verify_connection_async(cls) -> bool:
+        """Verifica si la conexión con Hugging Face es válida de forma async."""
+        try:
+            client = await cls.get_client_async()
+            logger.info("Conexión con Hugging Face verificada.")
+            return True
+        except (ValueError, ConnectionError) as e:
+            logger.error(f"Fallo en la verificación de conexión con Hugging Face: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error inesperado al verificar conexión con Hugging Face: {e}")
+            return False
 
     @classmethod
     def verify_connection(cls) -> bool:
@@ -78,26 +75,7 @@ class HuggingFaceService:
             logger.error(f"Error inesperado al verificar conexión con Hugging Face: {e}")
             return False
 
-    @classmethod
-    @ResilienceService.resilient_hf_call(
-        timeout_seconds=30.0,
-        retry_attempts=3,
-        fallback_response=False
-    )
-    async def verify_connection_async(cls) -> bool:
-        """Verifica si la conexión con Hugging Face es válida de forma async."""
-        try:
-            client = await cls.get_client_async()
-            logger.info("Conexión con Hugging Face verificada.")
-            return True
-        except (ValueError, ConnectionError) as e:
-            logger.error(f"Fallo en la verificación de conexión con Hugging Face: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Error inesperado al verificar conexión con Hugging Face: {e}")
-            return False
-
-# Exportar instancias para uso fácil
+# Exportar una instancia o métodos estáticos para uso fácil
 hf_client = HuggingFaceService.get_client
 hf_client_async = HuggingFaceService.get_client_async
 verify_hf_connection = HuggingFaceService.verify_connection

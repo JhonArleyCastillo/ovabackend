@@ -7,7 +7,7 @@ Este módulo contiene todos los servicios de la aplicación.
 from .resilience_service import ResilienceService
 from .huggingface_service import HuggingFaceService, hf_client, hf_client_async
 from .image_service import analyze_image_async
-from .chat_service import process_chat_message
+from .chat_service import get_llm_response_async, get_llm_response
 
 __all__ = [
     'ResilienceService',
@@ -15,5 +15,6 @@ __all__ = [
     'hf_client',
     'hf_client_async',
     'analyze_image_async',
-    'process_chat_message'
+    'get_llm_response_async',
+    'get_llm_response'
 ]

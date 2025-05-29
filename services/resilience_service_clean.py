@@ -160,14 +160,28 @@ class ResilienceService:
         return decorator
 
     @staticmethod
-    def get_circuit_breaker_status() -> dict:
-        """Retorna el estado actual del circuit breaker."""
+    def get_circuit_breaker_status(service_name: str = "default") -> dict:
+        """Retorna el estado actual del circuit breaker para un servicio específico."""
         return {
+            "service_name": service_name,
             "is_open": ResilienceService._circuit_breaker_state["is_open"],
             "failure_count": ResilienceService._circuit_breaker_state["failure_count"],
             "failure_threshold": ResilienceService._circuit_breaker_state["failure_threshold"],
             "last_failure_time": ResilienceService._circuit_breaker_state["last_failure_time"],
             "recovery_timeout": ResilienceService._circuit_breaker_state["recovery_timeout"]
+        }
+
+    @staticmethod
+    def get_retry_stats(service_name: str = "default") -> dict:
+        """Retorna estadísticas de retry para un servicio específico."""
+        # Por simplicidad, retornamos estadísticas básicas
+        # En una implementación real, esto sería más sofisticado
+        return {
+            "service_name": service_name,
+            "total_retries": 0,
+            "successful_retries": 0,
+            "failed_retries": 0,
+            "last_retry_time": None
         }
 
     @staticmethod
@@ -177,7 +191,3 @@ class ResilienceService:
         ResilienceService._circuit_breaker_state["is_open"] = False
         ResilienceService._circuit_breaker_state["last_failure_time"] = None
         logger.info("Circuit breaker reseteado manualmente")
-
-
-# Instancia global del servicio
-resilience_service = ResilienceService()
