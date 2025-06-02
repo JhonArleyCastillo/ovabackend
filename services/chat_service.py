@@ -25,7 +25,7 @@ async def get_llm_response_async(user_input: str) -> str:
         return generated_text
     except Exception as e:
         logger.error(f"Error al obtener respuesta del LLM: {e}")
-        raise  # Re-lanzar para que el sistema de resiliencia lo maneje
+        raise  # Relanzar para que el sistema de resiliencia lo maneje
 
 def get_llm_response(user_input: str) -> str:
     """Obtiene una respuesta del modelo LLM."""

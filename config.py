@@ -34,11 +34,9 @@ else:
     DB_USER = os.getenv("DB_USER")
     DB_PASSWORD = os.getenv("DB_PASSWORD")
     DB_NAME = os.getenv("DB_NAME")
-
-if DB_HOST or (IS_DEVELOPMENT and USE_SQLITE):
-    logger.info("Variables de base de datos cargadas correctamente")
-else:
-    logger.warning("Variables de base de datos no encontradas")
+    # No usar SQLite en producción
+    USE_SQLITE = False
+    SQLITE_PATH = None
 
 # ===== Configuración de Hugging Face =====
 HF_API_KEY = os.getenv("HF_API_KEY")  # Token de Hugging Face
@@ -73,4 +71,30 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 # Verificar configuración JWT segura
 if JWT_SECRET_KEY == "supersecretkey":
     logger.warning("JWT_SECRET_KEY está usando el valor predeterminado. Se recomienda cambiarlo en producción.")
+
+# ===== Validaciones en Producción =====
+if not IS_DEVELOPMENT:
+    # Validar configuración de base de datos
+    if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME]):
+        logger.error("Faltan variables de entorno de base de datos en producción.")
+        raise EnvironmentError("Configuración de base de datos incompleta para producción.")
+    # Validar Hugging Face
+    missing_hf = [k for k,v in {
+        'HF_API_KEY': HF_API_KEY,
+        'HF_MODELO_LLM': HF_MODELO_LLM,
+        'HF_MODELO_TTS': HF_MODELO_TTS,
+        'HF_MODELO_STT': HF_MODELO_STT,
+        'HF_MODELO_IMG': HF_MODELO_IMG,
+        'HF_MODELO_SIGN': HF_MODELO_SIGN
+    }.items() if not v]
+    if missing_hf:
+        logger.error(f"Faltan variables HF en producción: {missing_hf}")
+        raise EnvironmentError(f"Variables HF requeridas no definidas: {missing_hf}")
+    # Validar JWT
+    if JWT_SECRET_KEY == "supersecretkey":
+        logger.error("JWT_SECRET_KEY está usando el valor predeterminado en producción.")
+        raise EnvironmentError("Debe configurar JWT_SECRET_KEY seguro en producción.")
+    # Ajustar CORS para producción (solo HTTPS except localhost)
+    ALLOWED_ORIGINS = [origin for origin in _raw_origins if origin.startswith("https://") or "localhost" in origin]
+    logger.info(f"Modo producción: Orígenes permitidos: {ALLOWED_ORIGINS}")
 
