@@ -19,7 +19,7 @@ class DatabaseManager:
     def get_db_dependency():
         """Dependencia de base de datos estandarizada para routers."""
         return Depends(get_db)
-      @staticmethod
+    @staticmethod
     @contextmanager
     def get_cursor(db: mysql.connector.connection.MySQLConnection, dictionary: bool = True):
         """Administrador de contexto para operaciones de cursor de base de datos."""
@@ -35,7 +35,7 @@ class DatabaseManager:
             )
         finally:
             cursor.close()
-      @staticmethod
+    @staticmethod
     def execute_query(
         db: mysql.connector.connection.MySQLConnection,
         query: str,
@@ -71,7 +71,7 @@ class DatabaseManager:
                 db.commit()
                 
             return result
-      @staticmethod
+    @staticmethod
     def check_record_exists(
         db: mysql.connector.connection.MySQLConnection,
         table: str,
