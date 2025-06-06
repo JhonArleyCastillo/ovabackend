@@ -8,6 +8,7 @@ from backend.utils import encode_audio_to_base64, create_error_response
 from fastapi.responses import JSONResponse
 from backend.routes import WS_DETECT_AUDIO, WS_CHAT
 from backend.models import TextMessage, AudioMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
+from backend.common.router_utils import handle_errors
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -172,6 +173,7 @@ async def chat_websocket(websocket: WebSocket):
             pass
 
 @router.post("/process-voice")
+@handle_errors
 async def process_voice_endpoint(audio: UploadFile = File(...)):
     """Endpoint HTTP para procesar un archivo de audio."""
     try:

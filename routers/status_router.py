@@ -8,11 +8,13 @@ import psutil
 # Importar las rutas definidas
 from backend.routes import STATUS_ROUTE
 from backend.services.huggingface_service import HuggingFaceService
+from backend.common.router_utils import handle_errors
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/")
+@handle_errors
 async def read_root(request: Request):
     """Endpoint de prueba para verificar que el servidor está funcionando"""
     logger.info(f"Solicitud de raíz desde: {request.client.host}")
@@ -23,6 +25,7 @@ async def read_root(request: Request):
     }
 
 @router.get(STATUS_ROUTE)
+@handle_errors
 async def get_status():
     """
     Devuelve información sobre el estado del servidor

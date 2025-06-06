@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import mysql.connector
 
-from backend.auth import get_current_admin, verify_token
+from backend.auth import get_current_admin
 from backend.common.database_utils import DbDependency
 from backend.common.error_handlers import ErrorHandler
 
@@ -69,6 +69,17 @@ class AuthValidators:
         if not exp:
             return True
         return time.time() > exp
+
+
+def build_token_response(
+    token: str,
+    es_superadmin: bool,
+    token_type: str = "bearer"
+) -> dict:
+    """
+    Construye una respuesta estándar de token con información adicional.
+    """
+    return {"access_token": token, "token_type": token_type, "es_superadmin": es_superadmin}
 
 
 # Dependencias comunes de autenticación

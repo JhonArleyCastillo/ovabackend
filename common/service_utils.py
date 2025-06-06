@@ -8,6 +8,10 @@ from functools import wraps
 import time
 
 from backend.services.resilience_service import ResilienceService
+from fastapi import HTTPException, UploadFile, Request
+import io
+from PIL import Image
+from backend.utils import validate_image_magic_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -180,3 +184,36 @@ audio_service_resilient = HuggingFaceServiceMixin.with_resilience(
     retry_attempts=2,
     fallback_response=b""  # Respuesta de audio vacía
 )
+
+
+# Helper asíncrono para cargar y validar imágenes en routers
+
+async def load_and_validate_image(file: UploadFile, allowed_types: list[str]):
+    """
+    Lee y valida un archivo de imagen UploadFile.
+    - Comprueba content_type
+    - Valida magic bytes
+    - Retorna objeto PIL.Image
+    """
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser una imagen")
+    # Leer datos binarios
+    image_data = await file.read()
+    # Validar magic bytes
+    is_valid, detected_type = validate_image_magic_bytes(image_data)
+    if not is_valid or detected_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="La extensión de la imagen no es permitida")
+    # Abrir con PIL
+    try:
+        return Image.open(io.BytesIO(image_data))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al abrir la imagen: {e}")
+
+
+def extract_client_info(request: Request) -> dict:
+    """
+    Extrae información del cliente de una petición: dirección IP y user-agent.
+    """
+    ip_address = request.client.host if request else None
+    user_agent = request.headers.get("user-agent") if request else None
+    return {"ip_address": ip_address, "user_agent": user_agent}

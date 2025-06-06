@@ -6,7 +6,7 @@ gestión de tokens JWT y verificación de contraseñas.
 
 from datetime import datetime, timedelta
 from typing import Optional, Union, Dict, Any
-import jwt as pyjwt  # Cambiado a un alias más claro
+from jose import jwt, JWTError  # Usar python-jose para JWT
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import mysql.connector
@@ -51,7 +51,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     )
     
     to_encode.update({"exp": expire})
-    encoded_jwt = pyjwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
 def register_admin_session(
@@ -103,7 +103,7 @@ async def get_current_admin(
     
     try:
         # Decodificar el token usando PyJWT
-        payload = pyjwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         email: str = payload.get("sub")
         admin_id: int = payload.get("admin_id")
         
@@ -111,7 +111,7 @@ async def get_current_admin(
             raise credentials_exception
             
         token_data = schemas.TokenData(email=email, admin_id=admin_id)
-    except pyjwt.PyJWTError:  # Excepción específica de PyJWT
+    except JWTError:  # Excepción de python-jose
         raise credentials_exception
     
     cursor = db.cursor(dictionary=True)

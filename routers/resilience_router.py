@@ -5,6 +5,7 @@ Proporciona endpoints para verificar el estado de los servicios y circuit breake
 from fastapi import APIRouter, HTTPException
 from backend.services.resilience_service import ResilienceService
 from backend.services.huggingface_service import verify_hf_connection_async
+from backend.common.router_utils import handle_errors  # Manejo centralizado de errores
 import logging
 import asyncio
 
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 resilience_router = APIRouter(prefix="/resilience", tags=["resilience"])
 
 @resilience_router.get("/health")
+@handle_errors
 async def health_check():
     """Endpoint de health check que verifica todos los servicios críticos."""
     try:
@@ -31,6 +33,7 @@ async def health_check():
         raise HTTPException(status_code=503, detail="Service unavailable")
 
 @resilience_router.get("/status")
+@handle_errors
 async def resilience_status():
     """Endpoint que retorna el estado de los patrones de resiliencia."""
     try:
@@ -48,6 +51,7 @@ async def resilience_status():
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @resilience_router.post("/test-resilience")
+@handle_errors
 async def test_resilience():
     """Endpoint para probar los patrones de resiliencia con una llamada controlada."""
     try:
@@ -66,6 +70,7 @@ async def test_resilience():
         }
 
 @resilience_router.post("/reset-circuit-breaker")
+@handle_errors
 async def reset_circuit_breaker():
     """Endpoint para resetear el circuit breaker manualmente."""
     try:

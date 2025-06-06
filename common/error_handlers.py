@@ -102,3 +102,13 @@ def validation_error_handler(field: str = ""):
                 )
         return wrapper
     return decorator
+
+
+class BaseError(Exception):
+    """
+    Excepción base para errores personalizados con código HTTP y detalle.
+    """
+    def __init__(self, status_code: int, detail: str):
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(detail)

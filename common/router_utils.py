@@ -5,8 +5,10 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends
 import mysql.connector
 import logging
+from functools import wraps
 
 from backend.common.database_utils import DatabaseManager, DbDependency
+from backend.common.error_handlers import BaseError  # Asegúrate que BaseError exista y sea tu clase base
 
 logger = logging.getLogger(__name__)
 
@@ -101,48 +103,68 @@ class CRUDBase:
         if limit is not None:
             query += " LIMIT %s"
             params += (limit,)
+        if offset is not None:
+            query += " OFFSET %s"
+            params += (offset,)
             
-            if offset is not None:
-                query += " OFFSET %s"
-                params += (offset,)
-        
-        return DatabaseManager.execute_query(db, query, params, fetch_all=True) or []
-    
-    def create(
-        self,
-        db: mysql.connector.connection.MySQLConnection,
-        data: Dict
-    ) -> int:
-        """Crear un nuevo registro y devolver su ID."""
-        fields = ", ".join(data.keys())
-        placeholders = ", ".join(["%s"] * len(data))
-        query = f"INSERT INTO {self.table_name} ({fields}) VALUES ({placeholders})"
-        
-        with DatabaseManager.get_cursor(db, dictionary=False) as cursor:
-            cursor.execute(query, tuple(data.values()))
-            db.commit()
-            return cursor.lastrowid
-    
-    def update(
-        self,
-        db: mysql.connector.connection.MySQLConnection,
-        record_id: int,
-        data: Dict
-    ) -> bool:
-        """Actualizar un registro por ID."""
-        set_clause = ", ".join([f"{key} = %s" for key in data.keys()])
-        query = f"UPDATE {self.table_name} SET {set_clause} WHERE {self.id_field} = %s"
-        params = tuple(data.values()) + (record_id,)
-        
-        DatabaseManager.execute_query(db, query, params, commit=True)
-        return True
-    
-    def delete(
-        self,
-        db: mysql.connector.connection.MySQLConnection,
-        record_id: int
-    ) -> bool:
-        """Eliminar un registro por ID."""
-        query = f"DELETE FROM {self.table_name} WHERE {self.id_field} = %s"
-        DatabaseManager.execute_query(db, query, (record_id,), commit=True)
-        return True
+        return DatabaseManager.execute_query(db, query, params, fetch_all=True)
+
+    # Aquí puedes añadir métodos para create, update, delete si son genéricos
+    # Por ejemplo:
+    # def create(self, db: mysql.connector.connection.MySQLConnection, data: Dict) -> int:
+    #     fields = \", \".join(data.keys())
+    #     placeholders = \", \".join([\"%s\"] * len(data))
+    #     query = f\"INSERT INTO {self.table_name} ({fields}) VALUES ({placeholders})\"
+    #     return DatabaseManager.execute_query(db, query, tuple(data.values()), commit=True, get_last_id=True)
+
+
+# Decorador para manejo de errores
+
+def handle_errors(fn):
+    """
+    Decorador para manejar errores comunes y convertirlos en HTTPException.
+    Asume que los errores personalizados heredan de BaseError y tienen
+    atributos `status_code` y `detail`.
+    """
+    @wraps(fn)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await fn(*args, **kwargs)
+        except BaseError as e:
+            # Si el error ya tiene status_code y detail definidos (como en BaseError)
+            logger.error(f"Error controlado en {fn.__name__}: {e.detail} (Status: {e.status_code})")
+            raise HTTPException(status_code=e.status_code, detail=e.detail)
+        except HTTPException as e:
+            # Re-lanzar HTTPExceptions existentes, loggeando si es un error de servidor
+            if e.status_code >= 500:
+                logger.error(f"HTTPException no controlada (servidor) en {fn.__name__}: {e.detail} (Status: {e.status_code})")
+            else:
+                logger.warning(f"HTTPException (cliente) en {fn.__name__}: {e.detail} (Status: {e.status_code})")
+            raise
+        except mysql.connector.Error as db_err:
+            # Manejo específico para errores de base de datos
+            logger.error(f"Error de base de datos en {fn.__name__}: {db_err}")
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Error de base de datos: {db_err.msg}")
+        except Exception as e:
+            # Para cualquier otra excepción no controlada, retornar un 500 genérico
+            logger.exception(f"Error no esperado en {fn.__name__}: {e}") # Usar logger.exception para incluir traceback
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
+    return wrapper
+
+# Decorador para requerir superadmin en endpoints críticos
+from fastapi import HTTPException, status
+
+def require_superadmin(fn):
+    """
+    Decorador para asegurar que el administrador actual es superadmin.
+    """
+    @wraps(fn)
+    async def wrapper(*args, current_admin=Depends(lambda: None), **kwargs):
+        # current_admin se inyecta con Depends(get_current_admin)
+        if not current_admin or not current_admin.get("es_superadmin", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acceso restringido: requiere superadmin"
+            )
+        return await fn(*args, **kwargs)
+    return wrapper
