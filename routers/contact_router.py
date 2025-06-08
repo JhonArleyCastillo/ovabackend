@@ -6,53 +6,45 @@ Este router maneja las operaciones relacionadas con los mensajes de contacto:
 - Listado y gestión de mensajes para administradores
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 import mysql.connector
 from backend.common.database_utils import DatabaseManager, DbDependency
 from backend.auth import get_current_admin
-import schemas
+from backend.schemas import ContactoCreate, ContactoResponse, ContactoUpdate
 from backend.db_models import ContactoModel
 from backend.common.router_utils import handle_errors
-import backend.db_models as db_models
+from pydantic import BaseModel, EmailStr
 
 router = APIRouter(
-    prefix="/api/contacto",
+    prefix="/api/contactos",
     tags=["contacto"],
     responses={404: {"description": "Not found"}},
 )
 
-@router.post("/", response_model=schemas.ContactoResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ContactoResponse, status_code=status.HTTP_201_CREATED)
 @handle_errors
 async def enviar_mensaje(
-    contacto: schemas.ContactoCreate,
+    contacto: ContactoCreate,
     db: mysql.connector.connection.MySQLConnection = DbDependency
 ):
     """
     Envía un mensaje desde el formulario de contacto.
     Esta ruta es pública y no requiere autenticación.
     """
-    # Crear el mensaje en la base de datos
-    contacto_id = DatabaseManager.execute_query(
-        db,
-        "INSERT INTO contacto (nombre, email, asunto, mensaje) VALUES (%s, %s, %s, %s)",
-        (contacto.nombre, contacto.email, contacto.asunto, contacto.mensaje),
-        commit=True,
-        fetch_one=False
+    # Usar ContactoModel para crear y obtener el registro
+    contacto_id = ContactoModel.crear(
+        contacto.nombre_completo,
+        contacto.email,
+        contacto.asunto,
+        contacto.mensaje
     )
-        
-    # Obtener el mensaje creado
-    nuevo_contacto = DatabaseManager.execute_query(
-        db,
-        "SELECT * FROM contacto WHERE id = %s",
-        (contacto_id,),
-        fetch_one=True
-    )
+    nuevo_contacto = ContactoModel.obtener_por_id(contacto_id)
     if not nuevo_contacto:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error al crear el mensaje de contacto")
     return nuevo_contacto
 
-@router.get("/", response_model=List[schemas.ContactoResponse])
+@router.get("/", response_model=List[ContactoResponse])
 @handle_errors
 async def listar_mensajes(
     skip: int = 0,
@@ -67,10 +59,10 @@ async def listar_mensajes(
     """
     # Obtener mensajes con opción de filtrar no leídos
     where = " WHERE leido = FALSE" if solo_no_leidos else ""
-    query = f"SELECT * FROM contacto{where} LIMIT %s OFFSET %s"
+    query = f"SELECT * FROM contactos{where} LIMIT %s OFFSET %s"
     return DatabaseManager.execute_query(db, query, (limit, skip), fetch_all=True)
 
-@router.get("/{contacto_id}", response_model=schemas.ContactoResponse)
+@router.get("/{contacto_id}", response_model=ContactoResponse)
 @handle_errors
 async def obtener_mensaje(
     contacto_id: int,
@@ -91,11 +83,11 @@ async def obtener_mensaje(
         
     return mensaje
 
-@router.patch("/{contacto_id}", response_model=schemas.ContactoResponse)
+@router.patch("/{contacto_id}", response_model=ContactoResponse)
 @handle_errors
 async def actualizar_mensaje(
     contacto_id: int,
-    datos: schemas.ContactoUpdate,
+    datos: ContactoUpdate,
     db: mysql.connector.connection.MySQLConnection = DbDependency,
     current_admin: dict = Depends(get_current_admin)
 ):
@@ -121,7 +113,6 @@ async def actualizar_mensaje(
     
     # Obtener el mensaje actualizado
     mensaje_actualizado = ContactoModel.obtener_por_id(contacto_id)
-    
     return mensaje_actualizado
 
 @router.delete("/{contacto_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -146,9 +137,29 @@ async def eliminar_mensaje(
     
     # Eliminar el mensaje
     eliminado = ContactoModel.eliminar(contacto_id)
-    
+     
     if not eliminado:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al eliminar el mensaje"
         )
+        
+class UsuarioContactGroup(BaseModel):
+    email: EmailStr
+    mensajes: List[ContactoResponse]
+@router.get("/agrupados", response_model=List[UsuarioContactGroup])
+@handle_errors
+async def listar_contactos_agrupados(
+    db:mysql.connector.connection.MySQLConnection = DbDependency
+):
+    todos = DatabaseManager.execute_query(
+        db, 
+        "SELECT nombre, email, asunto, mensaje, fecha_envio, leido, respondido FROM contactos",
+        fetch_all=True
+    )
+    
+    grupos: Dict[str, List[dict]] = {}
+    for c in todos:
+        grupos.setdefault(c['email'], []).append(c)
+    
+    return [{"email": email, "mensajes": msgs} for email, msgs in grupos.items()]

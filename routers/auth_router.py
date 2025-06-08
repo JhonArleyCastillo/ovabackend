@@ -20,7 +20,7 @@ from backend.common.database_utils import DatabaseManager, DbDependency  # Uso c
 from backend.common.router_utils import handle_errors  # Importar el decorador
 from backend.common.service_utils import extract_client_info
 from backend.common.auth_utils import build_token_response
-from backend.services.admin_service import create_admin as service_create_admin, list_admins as service_list_admins, authenticate_admin as service_authenticate_admin
+from backend.services.admin_service import create_admin as service_create_admin, list_admins as service_list_admins, authenticate_admin as service_authenticate_admin, update_admin as service_update_admin
 from backend.common.router_utils import require_superadmin
 import backend.auth as auth
 import backend.schemas as schemas
@@ -135,3 +135,33 @@ async def cerrar_sesion(
         commit=True
     )
     return None
+
+@router.patch("/admins/{admin_id}", response_model=schemas.AdminResponse)
+@handle_errors
+@require_superadmin
+async def modificar_admin(
+    admin_id: int,
+    cambios: schemas.AdminUpdate,
+    db: mysql.connector.connection.MySQLConnection = DbDependency
+):
+    """
+    Modifica campos de un administrador (requiere superadmin).
+    """
+    datos = cambios.dict(exclude_none=True)
+    return service_update_admin(db, admin_id, datos)
+
+@router.post("/admins/{admin_id}/toggle", response_model=schemas.AdminResponse)
+@handle_errors
+@require_superadmin
+async def activar_desactivar_admin(
+    admin_id: int,
+    action: str,
+    db: mysql.connector.connection.MySQLConnection = DbDependency
+):
+    """
+    Activa o desactiva un administrador. action debe ser 'activar' o 'desactivar'.
+    """
+    if action not in ("activar", "desactivar"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Acción inválida")
+    estado = True if action == "activar" else False
+    return service_update_admin(db, admin_id, {"activo": estado})

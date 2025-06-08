@@ -73,3 +73,35 @@ def authenticate_admin(
     Autentica a un administrador.
     """
     return auth_authenticate_admin(db, email, password)
+
+
+def update_admin(
+    db: mysql.connector.connection.MySQLConnection,
+    admin_id: int,
+    data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Actualiza un administrador con los campos proporcionados.
+    """
+    # Construir dinámicamente la consulta UPDATE
+    fields = []
+    params: List[Any] = []
+    for key, value in data.items():
+        fields.append(f"{key} = %s")
+        params.append(value)
+    params.append(admin_id)
+
+    query = f"UPDATE administradores SET {', '.join(fields)} WHERE id = %s"
+    DatabaseManager.execute_query(
+        db,
+        query,
+        tuple(params),
+        commit=True
+    )
+    # Devolver el administrador actualizado
+    return DatabaseManager.execute_query(
+        db,
+        "SELECT * FROM administradores WHERE id = %s",
+        (admin_id,),
+        fetch_one=True
+    )

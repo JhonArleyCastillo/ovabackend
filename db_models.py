@@ -419,7 +419,7 @@ class ContactoModel:
             cursor = conn.cursor()
             cursor.execute("""
             INSERT INTO contactos 
-            (nombre, email, asunto, mensaje) 
+            (nombre_completo, email, asunto, mensaje) 
             VALUES (%s, %s, %s, %s)
             """, (nombre, email, asunto, mensaje))
             
@@ -440,7 +440,7 @@ class ContactoModel:
         with db_session() as conn:
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
-            SELECT id, nombre, email, asunto, mensaje, fecha_envio, leido, respondido
+            SELECT id, nombre_completo as nombre, email, asunto, mensaje, fecha_envio, leido, respondido
             FROM contactos 
             WHERE id = %s
             """, (contacto_id,))
@@ -467,7 +467,7 @@ class ContactoModel:
             Lista de mensajes de contacto.
         """
         sql_base = """
-        SELECT id, nombre, email, asunto, mensaje, fecha_envio, leido, respondido
+        SELECT id, nombre_completo as nombre, email, asunto, mensaje, fecha_envio, leido, respondido
         FROM contactos
         """
         

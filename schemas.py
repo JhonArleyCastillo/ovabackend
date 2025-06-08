@@ -95,15 +95,15 @@ class SesionAdminResponse(SesionAdminBase):
 
 class ContactoCreate(BaseModel):
     """Datos para crear un nuevo mensaje de contacto."""
-    nombre: str = Field(..., min_length=2, max_length=100)
+    nombre_completo: str = Field(..., min_length=2, max_length=200, alias='nombre')  # nombre completo
     email: EmailStr
     asunto: str = Field(..., min_length=3, max_length=200)
     mensaje: str = Field(..., min_length=10)
 
-    @validator('nombre')
+    @validator('nombre_completo')
     def nombre_must_be_valid(cls, v):
         if not v.strip():
-            raise ValueError('El nombre no puede estar vacío')
+            raise ValueError('El nombre completo no puede estar vacío')
         return v.strip()
 
     @validator('asunto')
@@ -127,6 +127,7 @@ class ContactoResponse(ContactoCreate):
 
     class Config:
         from_attributes = True
+        allow_population_by_field_name = True
 
 class ContactoUpdate(BaseModel):
     """Datos para actualizar un mensaje de contacto."""
