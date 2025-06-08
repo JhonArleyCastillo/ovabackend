@@ -8,6 +8,7 @@ que se envían y reciben a través de la API.
 from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, validator
+import re
 
 # Esquemas de autenticación
 
@@ -57,8 +58,17 @@ class AdminResponse(AdminBase):
 
 class AdminChangePassword(BaseModel):
     """Datos para cambiar la contraseña de un administrador."""
-    password_actual: str
-    nueva_password: str = Field(..., min_length=6)
+    password_actual: str 
+    nueva_password: str = Field(..., min_length=8)
+    
+    @validator('nueva_password')
+    @classmethod
+    def validate_password(cls, v):
+        pattern= r'^(?=.*[A-Za-z])(?=.*\d)(?=.*[$@$!%*?])([A-Za-z\d$@$!%*?][^ ]){8,}$',
+        description="Nueva contraseña debe tener al menos 8 caracteres, entre simbolos, números y letras."
+        if not re.match(pattern, v):    
+            raise ValueError(description)
+        return v
 
 # Esquemas de sesiones de administradores
 

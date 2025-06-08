@@ -67,7 +67,13 @@ async def login(
         ip_address=client_info["ip_address"],
         navegador=client_info["user_agent"]
     )
-    return build_token_response(access_token, admin["es_superadmin"])
+    return build_token_response(
+        access_token,
+        admin["es_superadmin"],
+        admin["id"],
+        admin["email"],
+        admin["nombre"]
+    )
 
 @router.post("/admins/", response_model=schemas.AdminResponse)
 @handle_errors

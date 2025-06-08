@@ -74,12 +74,23 @@ class AuthValidators:
 def build_token_response(
     token: str,
     es_superadmin: bool,
+    admin_id: int,
+    email: str,
+    nombre: str,
     token_type: str = "bearer"
 ) -> dict:
     """
-    Construye una respuesta estándar de token con información adicional.
+    Construye una respuesta estándar de token con información adicional,
+    incluyendo datos de administrador para cumplir con el modelo Token.
     """
-    return {"access_token": token, "token_type": token_type, "es_superadmin": es_superadmin}
+    return {
+        "access_token": token,
+        "token_type": token_type,
+        "es_superadmin": es_superadmin,
+        "admin_id": admin_id,
+        "email": email,
+        "nombre": nombre
+    }
 
 
 # Dependencias comunes de autenticación
