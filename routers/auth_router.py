@@ -1,31 +1,38 @@
 """
-Rutas API para la autenticación y gestión de administradores.
+Authentication and administrator management API routes.
 
-Este archivo define los endpoints para el inicio de sesión de administradores,
-la gestión de sus cuentas y el seguimiento de sesiones.
+This module defines API endpoints for administrator login, account management,
+and session tracking with comprehensive error handling and security features.
 """
 
-from typing import List
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 import mysql.connector
 import sys
 import os
 
-# Añadir el directorio raíz del proyecto al path de Python
+# Add project root directory to Python path for absolute imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Ahora importamos desde backend con rutas absolutas
-from backend.common.database_utils import DatabaseManager, DbDependency  # Uso centralizado de DB
-from backend.common.router_utils import handle_errors  # Importar el decorador
-from backend.common.service_utils import extract_client_info
-from backend.common.auth_utils import build_token_response
-from backend.services.admin_service import create_admin as service_create_admin, list_admins as service_list_admins, authenticate_admin as service_authenticate_admin, update_admin as service_update_admin
-from backend.common.router_utils import require_superadmin
-import backend.auth as auth
-import backend.schemas as schemas
-import backend.db_models as db_models
+# Import modules
+from common.database_utils import DatabaseManager, DbDependency
+from common.router_utils import handle_errors
+from common.service_utils import extract_client_info
+from common.auth_utils import build_token_response
+from services.admin_service import (
+    create_admin as service_create_admin, 
+    list_admins as service_list_admins, 
+    authenticate_admin as service_authenticate_admin, 
+    update_admin as service_update_admin
+)
+from common.router_utils import require_superadmin
+import auth
+import schemas
+import db_models
 
+# Configure router with proper prefix and metadata
 router = APIRouter(
     prefix="/api/auth",
     tags=["autenticación"],
@@ -38,11 +45,31 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: mysql.connector.connection.MySQLConnection = DbDependency,
     request: Request = None
-):
+) -> Dict[str, Any]:
     """
-    Autentica un administrador y genera un token JWT.
+    Authenticate an administrator and generate a JWT token.
+    
+    This endpoint validates administrator credentials and creates a new
+    session with proper token generation and security tracking.
+    
+    Args:
+        form_data (OAuth2PasswordRequestForm): Login credentials from form.
+        db (mysql.connector.connection.MySQLConnection): Database connection.
+        request (Request): HTTP request object for client info extraction.
+    
+    Returns:
+        Dict[str, Any]: Token response with access token and metadata.
+        
+    Raises:
+        HTTPException: If credentials are invalid or authentication fails.
     """
-    admin = service_authenticate_admin(db, form_data.username, form_data.password)
+    # Authenticate administrator using service layer
+    admin = service_authenticate_admin(
+        db, 
+        form_data.username, 
+        form_data.password
+    )
+    
     if not admin:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

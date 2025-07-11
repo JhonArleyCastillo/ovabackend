@@ -1,14 +1,23 @@
 """
-Servicio de administradores: operaciones CRUD y autenticación.
+Administrator service module for CRUD operations and authentication.
+
+This module provides functions for creating, reading, updating, and deleting
+administrator accounts, as well as authentication-related operations.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import mysql.connector
 from fastapi import HTTPException, status
+import sys
+import os
 
-from backend.common.database_utils import DatabaseManager
-from backend.schemas import AdminCreate
-from backend.security_utils import get_password_hash
-from backend.auth import authenticate_admin as auth_authenticate_admin
+# Add the parent directory to sys.path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import modules
+from common.database_utils import DatabaseManager
+from schemas import AdminCreate
+from security_utils import get_password_hash
+from auth import authenticate_admin as auth_authenticate_admin
 
 
 def create_admin(
@@ -16,9 +25,19 @@ def create_admin(
     admin_data: AdminCreate
 ) -> Dict[str, Any]:
     """
-    Crea un nuevo administrador en la base de datos.
+    Create a new administrator in the database.
+    
+    Args:
+        db (mysql.connector.connection.MySQLConnection): Database connection.
+        admin_data (AdminCreate): Administrator data from request.
+    
+    Returns:
+        Dict[str, Any]: Created administrator data.
+        
+    Raises:
+        HTTPException: If email already exists or creation fails.
     """
-    # Verificar si el correo ya existe
+    # Check if email already exists to prevent duplicates
     existing = DatabaseManager.execute_query(
         db,
         "SELECT * FROM administradores WHERE email = %s",
@@ -31,14 +50,20 @@ def create_admin(
             detail="El correo electrónico ya está registrado"
         )
 
+    # Hash password for secure storage
     hashed_password = get_password_hash(admin_data.password)
+    
+    # Insert new administrator into database
     new_admin_id = DatabaseManager.execute_query(
         db,
-        "INSERT INTO administradores (email, nombre, hashed_password, es_superadmin, activo) VALUES (%s, %s, %s, %s, %s)",
+        """INSERT INTO administradores 
+           (email, nombre, hashed_password, es_superadmin, activo) 
+           VALUES (%s, %s, %s, %s, %s)""",
         (admin_data.email, admin_data.nombre, hashed_password, False, True),
         commit=True
     )
-    # Obtener el administrador creado
+    
+    # Retrieve and return the created administrator
     new_admin = DatabaseManager.execute_query(
         db,
         "SELECT * FROM administradores WHERE id = %s",

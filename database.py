@@ -1,67 +1,107 @@
 """
-Configuración de la base de datos para la aplicación.
+Database configuration and connection management for the application.
 
-Este archivo configura la conexión a la base de datos usando mysql-connector-python
-y proporciona funciones para gestionar las conexiones.
+This module configures database connections using mysql-connector-python for
+production and SQLite for development environments. It provides connection
+pooling, context managers, and connection utilities with proper error handling
+and logging.
 """
 
 import mysql.connector
 from mysql.connector import pooling
 from contextlib import contextmanager
+from typing import Optional, Generator, Dict, Any
 import time
 import logging
 import os
 import sqlite3
 from importlib import import_module
 
-# Configurar logger
+# Configure module logger
 logger = logging.getLogger(__name__)
 
-# Importar las variables de configuración directamente desde config.py
-from backend.config import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, IS_DEVELOPMENT
+# Import configuration variables from config module
+from config import (
+    DB_HOST, 
+    DB_PORT, 
+    DB_USER, 
+    DB_PASSWORD, 
+    DB_NAME, 
+    IS_DEVELOPMENT
+)
 
-# Comprobar si estamos en entorno de desarrollo con SQLite
+# Check for SQLite development configuration
 try:
-    from backend.config import USE_SQLITE, SQLITE_PATH
+    from config import USE_SQLITE, SQLITE_PATH
 except ImportError:
-    USE_SQLITE = False
+    USE_SQLITE: bool = False
+    SQLITE_PATH: Optional[str] = None
 
-# Base de datos SQLite para desarrollo
+# SQLite database configuration for development environment
 if IS_DEVELOPMENT and USE_SQLITE:
-    logger.info(f"Usando SQLite para desarrollo: {SQLITE_PATH}")
+    logger.info(f"Using SQLite for development: {SQLITE_PATH}")
     
-    # Crear el directorio para SQLite si no existe
-    os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
+    # Ensure SQLite directory exists
+    if SQLITE_PATH:
+        os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
     
-    # Función para obtener conexión SQLite
-    def get_sqlite_connection():
-        return sqlite3.connect(SQLITE_PATH)
-    
-    # Configurar manejo de contexto para SQLite
-    @contextmanager
-    def db_session():
+    def get_sqlite_connection() -> sqlite3.Connection:
         """
-        Proporciona un contexto para usar la conexión SQLite.
+        Create and return a SQLite database connection.
+        
+        Returns:
+            sqlite3.Connection: SQLite database connection with row factory.
+            
+        Raises:
+            sqlite3.Error: If connection cannot be established.
+        """
+        if not SQLITE_PATH:
+            raise ValueError("SQLITE_PATH not configured")
+            
+        try:
+            conn = sqlite3.connect(SQLITE_PATH)
+            # Configure connection to return dictionary-like rows
+            conn.row_factory = sqlite3.Row
+            return conn
+        except sqlite3.Error as e:
+            logger.error(f"SQLite connection error: {e}")
+            raise
+    
+    @contextmanager
+    def db_session() -> Generator[sqlite3.Connection, None, None]:
+        """
+        Provide a transactional scope for SQLite database operations.
+        
+        Yields:
+            sqlite3.Connection: Database connection with automatic 
+                               commit/rollback handling.
+                               
+        Raises:
+            sqlite3.Error: If database operation fails.
         """
         conn = None
         try:
             conn = get_sqlite_connection()
-            # Configurar para que devuelva diccionarios en las consultas
-            conn.row_factory = sqlite3.Row
             yield conn
             conn.commit()
         except sqlite3.Error as e:
             if conn:
                 conn.rollback()
-            logger.error(f"Error en la sesión SQLite: {e}")
+            logger.error(f"SQLite session error: {e}")
             raise
         finally:
             if conn:
                 conn.close()
     
-    def get_db():
+    def get_db() -> Generator[sqlite3.Connection, None, None]:
         """
-        Versión de get_db para SQLite, compatible con FastAPI.
+        FastAPI dependency for SQLite database connections.
+        
+        Yields:
+            sqlite3.Connection: Database connection for request handling.
+            
+        Raises:
+            sqlite3.Error: If database connection fails.
         """
         conn = None
         try:

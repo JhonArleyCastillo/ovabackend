@@ -1,24 +1,41 @@
 """
-Esquemas de datos para la API.
+Pydantic data schemas for API validation and documentation.
 
-Este archivo contiene los modelos Pydantic para validar y documentar los datos
-que se envían y reciben a través de la API.
+This module contains Pydantic models for validating and documenting data
+that is sent and received through the API endpoints. All models include
+proper type hints, validation rules, and documentation.
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, validator
 import re
 
-# Esquemas de autenticación
+# ===== Authentication Schemas =====
 
 class TokenData(BaseModel):
-    """Datos contenidos en un token JWT."""
+    """
+    JWT token payload data structure.
+    
+    Attributes:
+        email (str): Administrator's email address.
+        admin_id (int): Administrator's unique identifier.
+    """
     email: str
     admin_id: int
 
 class Token(BaseModel):
-    """Token de acceso JWT."""
+    """
+    JWT access token response structure.
+    
+    Attributes:
+        access_token (str): JWT token string.
+        token_type (str): Token type (typically "bearer").
+        admin_id (int): Administrator's unique identifier.
+        email (str): Administrator's email address.
+        nombre (str): Administrator's display name.
+        es_superadmin (bool): Whether user has superadmin privileges.
+    """
     access_token: str
     token_type: str
     admin_id: int
@@ -26,27 +43,54 @@ class Token(BaseModel):
     nombre: str
     es_superadmin: bool
 
-# Esquemas de administradores
+# ===== Administrator Schemas =====
 
 class AdminBase(BaseModel):
-    """Modelo base para administradores."""
+    """
+    Base administrator model with common fields.
+    
+    Attributes:
+        email (EmailStr): Valid email address.
+        nombre (str): Administrator's display name.
+    """
     email: EmailStr
     nombre: str
 
 class AdminCreate(AdminBase):
-    """Datos para crear un nuevo administrador."""
-    password: str = Field(..., min_length=6)
-    es_superadmin: bool = False
+    """
+    Schema for creating a new administrator account.
+    
+    Attributes:
+        password (str): Password with minimum 6 characters.
+        es_superadmin (bool): Whether to grant superadmin privileges.
+    """
+    password: str = Field(..., min_length=6, description="Minimum 6 characters")
+    es_superadmin: bool = Field(default=False, description="Grant superadmin access")
 
 class AdminUpdate(BaseModel):
-    """Datos para actualizar un administrador."""
-    nombre: Optional[str] = None
-    email: Optional[EmailStr] = None
-    es_superadmin: Optional[bool] = None
-    activo: Optional[bool] = None
+    """
+    Schema for updating administrator information.
+    
+    All fields are optional for partial updates.
+    
+    Attributes:
+        nombre (Optional[str]): New display name.
+        email (Optional[EmailStr]): New email address.
+        es_superadmin (Optional[bool]): Change superadmin status.
+        activo (Optional[bool]): Enable/disable account.
+    """
+    nombre: Optional[str] = Field(None, description="Administrator display name")
+    email: Optional[EmailStr] = Field(None, description="Valid email address")
+    es_superadmin: Optional[bool] = Field(None, description="Superadmin privileges")
+    activo: Optional[bool] = Field(None, description="Account active status")
 
 class AdminResponse(AdminBase):
-    """Respuesta con datos de administrador."""
+    """
+    Administrator data for API responses.
+    
+    Attributes:
+        id (int): Administrator's unique identifier.
+    """
     id: int
     es_superadmin: bool
     activo: bool
@@ -57,30 +101,76 @@ class AdminResponse(AdminBase):
         from_attributes = True
 
 class AdminChangePassword(BaseModel):
-    """Datos para cambiar la contraseña de un administrador."""
-    password_actual: str 
-    nueva_password: str = Field(..., min_length=8)
+    """
+    Schema for changing administrator password.
+    
+    Attributes:
+        password_actual (str): Current password for verification.
+        nueva_password (str): New password with minimum 8 characters.
+    """
+    password_actual: str = Field(..., description="Current password")
+    nueva_password: str = Field(
+        ..., 
+        min_length=8,
+        description="New password (8+ chars, letters, numbers, symbols)"
+    )
     
     @validator('nueva_password')
     @classmethod
-    def validate_password(cls, v):
-        pattern= r'^(?=.*[A-Za-z])(?=.*\d)(?=.*[$@$!%*?])([A-Za-z\d$@$!%*?][^ ]){8,}$',
-        description="Nueva contraseña debe tener al menos 8 caracteres, entre simbolos, números y letras."
+    def validate_password(cls, v: str) -> str:
+        """
+        Validate password strength requirements.
+        
+        Args:
+            v (str): Password to validate.
+            
+        Returns:
+            str: Validated password.
+            
+        Raises:
+            ValueError: If password doesn't meet requirements.
+        """
+        pattern = (
+            r'^(?=.*[A-Za-z])(?=.*\d)(?=.*[$@$!%*?&])'
+            r'([A-Za-z\d$@$!%*?&][^ ]){8,}$'
+        )
+        description = (
+            "Password must be at least 8 characters long and contain "
+            "letters, numbers, and special symbols."
+        )
         if not re.match(pattern, v):    
             raise ValueError(description)
         return v
 
-# Esquemas de sesiones de administradores
+# ===== Administrator Session Schemas =====
 
 class SesionAdminBase(BaseModel):
-    """Modelo base para sesiones de administradores."""
+    """
+    Base model for administrator sessions.
+    
+    Attributes:
+        admin_id (int): Administrator's unique identifier.
+        token (str): Session token.
+        ip_address (Optional[str]): Client IP address.
+        navegador (Optional[str]): Browser information.
+    """
     admin_id: int
     token: str
     ip_address: Optional[str] = None
     navegador: Optional[str] = None
 
 class SesionAdminResponse(SesionAdminBase):
-    """Respuesta con datos de sesión de administrador."""
+    """
+    Administrator session data for API responses.
+    
+    Attributes:
+        id (int): Session unique identifier.
+        fecha_inicio (datetime): Session start time.
+        fecha_expiracion (datetime): Session expiration time.
+        activa (bool): Whether session is active.
+        admin_email (str): Administrator's email.
+        admin_nombre (str): Administrator's name.
+    """
     id: int
     fecha_inicio: datetime
     fecha_expiracion: datetime
@@ -91,35 +181,105 @@ class SesionAdminResponse(SesionAdminBase):
     class Config:
         from_attributes = True
 
-# Esquemas de contacto
+# ===== Contact Schemas =====
 
 class ContactoCreate(BaseModel):
-    """Datos para crear un nuevo mensaje de contacto."""
-    nombre_completo: str = Field(..., min_length=2, max_length=200, alias='nombre')  # nombre completo
-    email: EmailStr
-    asunto: str = Field(..., min_length=3, max_length=200)
-    mensaje: str = Field(..., min_length=10)
+    """
+    Schema for creating a new contact message.
+    
+    Attributes:
+        nombre_completo (str): Full name of the contact person.
+        email (EmailStr): Valid email address.
+        asunto (str): Message subject.
+        mensaje (str): Message content.
+    """
+    nombre_completo: str = Field(
+        ..., 
+        min_length=2, 
+        max_length=200, 
+        alias='nombre',
+        description="Full name (2-200 characters)"
+    )
+    email: EmailStr = Field(..., description="Valid email address")
+    asunto: str = Field(
+        ..., 
+        min_length=3, 
+        max_length=200,
+        description="Message subject (3-200 characters)"
+    )
+    mensaje: str = Field(
+        ..., 
+        min_length=10,
+        description="Message content (minimum 10 characters)"
+    )
 
     @validator('nombre_completo')
-    def nombre_must_be_valid(cls, v):
+    @classmethod
+    def nombre_must_be_valid(cls, v: str) -> str:
+        """
+        Validate that the full name is not empty.
+        
+        Args:
+            v (str): Full name to validate.
+            
+        Returns:
+            str: Validated and trimmed full name.
+            
+        Raises:
+            ValueError: If name is empty after stripping whitespace.
+        """
         if not v.strip():
-            raise ValueError('El nombre completo no puede estar vacío')
+            raise ValueError('Full name cannot be empty')
         return v.strip()
 
     @validator('asunto')
-    def asunto_must_be_valid(cls, v):
+    @classmethod
+    def asunto_must_be_valid(cls, v: str) -> str:
+        """
+        Validate that the subject is not empty.
+        
+        Args:
+            v (str): Subject to validate.
+            
+        Returns:
+            str: Validated and trimmed subject.
+            
+        Raises:
+            ValueError: If subject is empty after stripping whitespace.
+        """
         if not v.strip():
-            raise ValueError('El asunto no puede estar vacío')
+            raise ValueError('Subject cannot be empty')
         return v.strip()
 
     @validator('mensaje')
-    def mensaje_must_be_valid(cls, v):
+    @classmethod
+    def mensaje_must_be_valid(cls, v: str) -> str:
+        """
+        Validate that the message is not empty.
+        
+        Args:
+            v (str): Message to validate.
+            
+        Returns:
+            str: Validated and trimmed message.
+            
+        Raises:
+            ValueError: If message is empty after stripping whitespace.
+        """
         if not v.strip():
-            raise ValueError('El mensaje no puede estar vacío')
+            raise ValueError('Message cannot be empty')
         return v.strip()
 
 class ContactoResponse(ContactoCreate):
-    """Respuesta con datos de mensaje de contacto."""
+    """
+    Contact message data for API responses.
+    
+    Attributes:
+        id (int): Contact message unique identifier.
+        fecha_envio (datetime): Message send timestamp.
+        leido (bool): Whether message has been read.
+        respondido (bool): Whether message has been responded to.
+    """
     id: int
     fecha_envio: datetime
     leido: bool
@@ -130,23 +290,52 @@ class ContactoResponse(ContactoCreate):
         allow_population_by_field_name = True
 
 class ContactoUpdate(BaseModel):
-    """Datos para actualizar un mensaje de contacto."""
-    leido: Optional[bool] = None
-    respondido: Optional[bool] = None
+    """
+    Schema for updating contact message status.
+    
+    Attributes:
+        leido (Optional[bool]): Mark message as read/unread.
+        respondido (Optional[bool]): Mark message as responded/not responded.
+    """
+    leido: Optional[bool] = Field(
+        None, 
+        description="Mark message as read"
+    )
+    respondido: Optional[bool] = Field(
+        None, 
+        description="Mark message as responded"
+    )
 
-# Esquemas de usuarios
+# ===== User Schemas =====
 
 class UsuarioBase(BaseModel):
-    """Modelo base para usuarios."""
-    email: EmailStr
-    nombre: str
+    """
+    Base user model with common fields.
+    
+    Attributes:
+        email (EmailStr): Valid email address.
+        nombre (str): User's display name.
+    """
+    email: EmailStr = Field(..., description="Valid email address")
+    nombre: str = Field(..., description="User's display name")
 
 class UsuarioCreate(UsuarioBase):
-    """Datos para crear un nuevo usuario/suscriptor."""
+    """
+    Schema for creating a new user/subscriber.
+    
+    Inherits all fields from UsuarioBase without additional requirements.
+    """
     pass
 
 class UsuarioResponse(UsuarioBase):
-    """Respuesta con datos de usuario."""
+    """
+    User data for API responses.
+    
+    Attributes:
+        id (int): User's unique identifier.
+        activo (bool): Whether user account is active.
+        fecha_registro (datetime): User registration timestamp.
+    """
     id: int
     activo: bool
     fecha_registro: datetime

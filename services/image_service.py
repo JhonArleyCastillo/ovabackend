@@ -1,16 +1,32 @@
+"""
+Image processing and analysis service module.
+
+This module provides comprehensive image analysis capabilities including
+object detection, image captioning, and sign language recognition using
+Hugging Face models with built-in resilience patterns.
+"""
+
 import logging
+from typing import Dict, List, Any, Optional, Union
 import numpy as np
 import asyncio
 import cv2
 from PIL import Image
 
+import sys
+import os
+
+# Add the parent directory to sys.path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from .huggingface_service import hf_client, hf_client_async
 from .resilience_service import ResilienceService
-from backend.config import HF_MODELO_SIGN
+from config import HF_MODELO_SIGN
 
+# Configure module logger
 logger = logging.getLogger(__name__)
 
-# Configuración de modelos
+# Model configuration constants
 DEFAULT_SIGN_LANGUAGE_MODEL = HF_MODELO_SIGN
 DEFAULT_OBJECT_DETECTION_MODEL = "facebook/detr-resnet-50"
 DEFAULT_IMAGE_CAPTIONING_MODEL = "nlpconnect/vit-gpt2-image-captioning"
@@ -18,36 +34,63 @@ DEFAULT_IMAGE_CAPTIONING_MODEL = "nlpconnect/vit-gpt2-image-captioning"
 @ResilienceService.resilient_hf_call(
     timeout_seconds=60.0,
     retry_attempts=3,
-    fallback_response={"objects": [], "description": "Servicio de análisis de imágenes temporalmente no disponible"}
+    fallback_response={
+        "objects": [], 
+        "description": "Image analysis service temporarily unavailable"
+    }
 )
-async def analyze_image_async(image: Image.Image) -> dict:
+async def analyze_image_async(image: Image.Image) -> Dict[str, Any]:
     """
-    Función principal para analizar una imagen con resiliencia.
-    Detecta objetos y genera una descripción.
+    Main function for comprehensive image analysis with resilience patterns.
+    
+    Performs object detection and generates image descriptions using multiple
+    AI models with automatic fallback and retry mechanisms.
     
     Args:
-        image: Imagen PIL a analizar
+        image (Image.Image): PIL Image object to analyze.
     
     Returns:
-        dict: Resultados del análisis con objetos detectados y descripción
+        Dict[str, Any]: Analysis results containing detected objects and 
+                       image description.
+                       
+    Raises:
+        ValueError: If image is None or invalid format.
+        RuntimeError: If all analysis attempts fail.
     """
-    # Convertir imagen PIL a numpy array para procesamiento
-    np_image = np.array(image)
-    
-    # Detectar objetos en la imagen
-    objects = await detect_objects_async(np_image)
-    
-    # Convertir la imagen a bytes para el proceso de captioning
-    img_byte_arr = cv2.imencode('.jpg', np_image)[1].tobytes()
-    
-    # Obtener descripción de la imagen
-    description_result = await describe_image_captioning_async(img_byte_arr)
-    
-    # Preparar respuesta
-    result = {
-        "objects": objects if isinstance(objects, list) else [],
-        "description": description_result.get("descripcion", "No se pudo generar una descripción")
-    }
+    if image is None:
+        raise ValueError("Image cannot be None")
+        
+    try:
+        # Convert PIL image to numpy array for processing
+        np_image = np.array(image)
+        
+        if np_image.size == 0:
+            raise ValueError("Image array is empty")
+        
+        # Detect objects in the image using computer vision models
+        objects = await detect_objects_async(np_image)
+        
+        # Convert image to bytes for captioning process
+        img_byte_arr = cv2.imencode('.jpg', np_image)[1].tobytes()
+        
+        # Generate image description using captioning models
+        description_result = await describe_image_captioning_async(img_byte_arr)
+        
+        # Prepare structured response
+        result = {
+            "objects": objects if isinstance(objects, list) else [],
+            "description": description_result.get(
+                "descripcion", 
+                "Could not generate image description"
+            )
+        }
+        
+        logger.info(f"Image analysis completed: {len(result['objects'])} objects detected")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in image analysis: {str(e)}")
+        raise RuntimeError(f"Image analysis failed: {str(e)}")
     
     return result
 

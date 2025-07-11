@@ -1,25 +1,35 @@
 """
-Servicio de resiliencia usando Hyx para manejar múltiples caídas consecutivas.
-Implementa Retry con backoff exponencial y simulación de Circuit Breaker.
+Resilience service using Hyx for handling multiple consecutive failures.
+
+This module implements resilience patterns including retry with exponential
+backoff and circuit breaker simulation for external service calls.
+It provides decorators and utilities for handling service failures gracefully.
 """
+
 import asyncio
-from typing import Callable, Any, Optional
+from typing import Callable, Any, Optional, Dict, Union
 import logging
 from functools import wraps
 import time
 
-# Importaciones correctas de Hyx basadas en la API real
+# Import Hyx retry functionality for resilience patterns
 from hyx.retry.api import retry
 from hyx.retry.backoffs import expo
 
+# Configure module logger
 logger = logging.getLogger(__name__)
 
 
 class ResilienceService:
-    """Servicio centralizado para patrones de resiliencia."""
+    """
+    Centralized service for implementing resilience patterns.
     
-    # Simulación simple de circuit breaker (ya que Hyx 0.0.2 es básico)
-    _circuit_breaker_state = {
+    Provides circuit breaker simulation, retry mechanisms, and
+    failure tracking for external service calls.
+    """
+    
+    # Circuit breaker state simulation (Hyx 0.0.2 has basic functionality)
+    _circuit_breaker_state: Dict[str, Union[int, float, bool]] = {
         "failure_count": 0,
         "last_failure_time": None,
         "is_open": False,
@@ -29,24 +39,38 @@ class ResilienceService:
 
     @classmethod
     def _check_circuit_breaker(cls) -> bool:
-        """Verifica el estado del circuit breaker simulado."""
+        """
+        Check the current state of the simulated circuit breaker.
+        
+        Returns:
+            bool: True if circuit is closed (allowing calls), 
+                  False if open (blocking calls).
+        """
         current_time = time.time()
         
-        # Si el circuit breaker está abierto, verificar si es tiempo de intentar recuperación
+        # If circuit breaker is open, check if recovery should be attempted
         if cls._circuit_breaker_state["is_open"]:
-            if (current_time - cls._circuit_breaker_state["last_failure_time"]) >= cls._circuit_breaker_state["recovery_timeout"]:
-                logger.info("Circuit breaker: Intentando recuperación")
+            last_failure = cls._circuit_breaker_state["last_failure_time"]
+            recovery_timeout = cls._circuit_breaker_state["recovery_timeout"]
+            
+            if (current_time - last_failure) >= recovery_timeout:
+                logger.info("Circuit breaker: Attempting recovery")
                 cls._circuit_breaker_state["is_open"] = False
                 cls._circuit_breaker_state["failure_count"] = 0
                 return True
             else:
-                logger.warning("Circuit breaker está abierto, rechazando llamada")
+                logger.warning("Circuit breaker is open, rejecting call")
                 return False
         
         return True
 
     @classmethod
-    def _record_success(cls):
+    def _record_success(cls) -> None:
+        """
+        Record a successful operation in the circuit breaker.
+        
+        Resets failure count and ensures circuit remains closed.
+        """
         """Registra un éxito en el circuit breaker."""
         cls._circuit_breaker_state["failure_count"] = 0
         cls._circuit_breaker_state["is_open"] = False

@@ -1,50 +1,69 @@
+"""
+Application configuration module.
+
+This module handles all configuration settings for the OVA Web application,
+including database connections, API keys, CORS settings, and environment-specific
+configurations. It uses environment variables with sensible defaults for
+development environments.
+"""
+
 import os
 import logging
 import secrets
-# Importar el módulo dotenv centralizado para asegurar que las variables de entorno estén cargadas
+from typing import Optional
 from dotenv import load_dotenv
+
+# Load environment variables from .env file
 load_dotenv()
 
-# Configurar logger
+# Configure module logger
 logger = logging.getLogger(__name__)
 
-# ===== Configuración del Entorno =====
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-IS_DEVELOPMENT = ENVIRONMENT == "development"
+# ===== Environment Configuration =====
+ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+IS_DEVELOPMENT: bool = ENVIRONMENT == "development"
 
-# ===== Configuración de la Base de Datos =====
-# Valores específicos para desarrollo y producción
+# ===== Database Configuration =====
+# Environment-specific database configuration with secure defaults
 if IS_DEVELOPMENT:
-    # Valores por defecto para desarrollo local
-    DB_HOST = os.getenv("DB_HOST", "localhost")
-    DB_PORT = int(os.getenv("DB_PORT", "3306"))
-    DB_USER = os.getenv("DB_USER", "root")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
-    DB_NAME = os.getenv("DB_NAME", "ovaweb_dev")
+    # Development environment defaults for local testing
+    DB_HOST: str = os.getenv("DB_HOST", "localhost")
+    DB_PORT: int = int(os.getenv("DB_PORT", "3306"))
+    DB_USER: str = os.getenv("DB_USER", "root")
+    DB_PASSWORD: str = os.getenv("DB_PASSWORD", "password")
+    DB_NAME: str = os.getenv("DB_NAME", "ovaweb_dev")
     
-    # SQLite como alternativa para desarrollo
-    USE_SQLITE = os.getenv("USE_SQLITE", "false").lower() == "true"
-    SQLITE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dev_database.sqlite')
+    # SQLite alternative for lightweight development
+    USE_SQLITE: bool = os.getenv("USE_SQLITE", "false").lower() == "true"
+    SQLITE_PATH: str = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 
+        'dev_database.sqlite'
+    )
     
-    logger.info(f"Configuración de desarrollo: {'SQLite' if USE_SQLITE else 'MySQL'}")
+    logger.info(
+        f"Development configuration: "
+        f"{'SQLite' if USE_SQLITE else 'MySQL'} database"
+    )
 else:
-    # En producción se requieren todos los valores explícitamente
-    DB_HOST = os.getenv("DB_HOST")
-    DB_PORT = int(os.getenv("DB_PORT", "3306")) 
-    DB_USER = os.getenv("DB_USER")
-    DB_PASSWORD = os.getenv("DB_PASSWORD")
-    DB_NAME = os.getenv("DB_NAME")
-    # No usar SQLite en producción
-    USE_SQLITE = False
-    SQLITE_PATH = None
+    # Production requires explicit configuration for security
+    DB_HOST: Optional[str] = os.getenv("DB_HOST")
+    DB_PORT: int = int(os.getenv("DB_PORT", "3306")) 
+    DB_USER: Optional[str] = os.getenv("DB_USER")
+    DB_PASSWORD: Optional[str] = os.getenv("DB_PASSWORD")
+    DB_NAME: Optional[str] = os.getenv("DB_NAME")
+    
+    # SQLite not recommended for production
+    USE_SQLITE: bool = False
+    SQLITE_PATH: Optional[str] = None
 
-# ===== Configuración de Hugging Face =====
-HF_API_KEY = os.getenv("HF_API_KEY")  # Token de Hugging Face
-HF_MODELO_LLM = os.getenv("HF_MODELO_LLM")
-HF_MODELO_TTS = os.getenv("HF_MODELO_TTS")
-HF_MODELO_STT = os.getenv("HF_MODELO_STT")
-HF_MODELO_IMG = os.getenv("HF_MODELO_IMG")
-HF_MODELO_SIGN = os.getenv("HF_MODELO_SIGN", "RavenOnur/Sign-Language")
+# ===== Hugging Face API Configuration =====
+# AI model configuration for various services
+HF_API_KEY: Optional[str] = os.getenv("HF_API_KEY")
+HF_MODELO_LLM: Optional[str] = os.getenv("HF_MODELO_LLM")
+HF_MODELO_TTS: Optional[str] = os.getenv("HF_MODELO_TTS")
+HF_MODELO_STT: Optional[str] = os.getenv("HF_MODELO_STT")
+HF_MODELO_IMG: Optional[str] = os.getenv("HF_MODELO_IMG")
+HF_MODELO_SIGN: str = os.getenv("HF_MODELO_SIGN", "RavenOnur/Sign-Language")
 
 # ===== Configuración de CORS =====
 # Definir orígenes permitidos según el entorno

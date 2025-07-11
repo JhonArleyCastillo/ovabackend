@@ -6,9 +6,14 @@ from fastapi import APIRouter, HTTPException, status, Depends
 import mysql.connector
 import logging
 from functools import wraps
+import sys
+import os
 
-from backend.common.database_utils import DatabaseManager, DbDependency
-from backend.common.error_handlers import BaseError  # Asegúrate que BaseError exista y sea tu clase base
+# Add the parent directory to sys.path to allow imports  
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from common.database_utils import DatabaseManager, DbDependency
+from common.error_handlers import BaseError  # Ensure BaseError exists and is your base class
 
 logger = logging.getLogger(__name__)
 

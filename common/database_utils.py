@@ -6,8 +6,14 @@ from fastapi import Depends, HTTPException, status
 import mysql.connector
 import logging
 from contextlib import contextmanager
+import sys
+import os
 
-from backend.database import get_db
+# Add the parent directory to sys.path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import database module
+from database import get_db
 
 logger = logging.getLogger(__name__)
 

@@ -3,12 +3,18 @@ import logging
 from typing import List
 import io
 from PIL import Image
-# Cambiado a importaciones absolutas desde backend
-from backend.services.image_service import analyze_image, process_sign_language
-from backend.common.service_utils import load_and_validate_image
-from backend.routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
-from backend.utils import validate_image_magic_bytes
-from backend.common.router_utils import handle_errors  # Manejo centralizado de errores
+import sys
+import os
+
+# Add the parent directory to sys.path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import services and utilities
+from services.image_service import analyze_image, process_sign_language
+from common.service_utils import load_and_validate_image
+from routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
+from utils import validate_image_magic_bytes
+from common.router_utils import handle_errors  # Centralized error handling
 
 # Configurar logging
 logger = logging.getLogger(__name__)

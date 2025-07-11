@@ -1,13 +1,20 @@
 """
-Router para monitoreo de patrones de resiliencia.
-Proporciona endpoints para verificar el estado de los servicios y circuit breakers.
+Router for resilience pattern monitoring.
+Provides endpoints to check service status and circuit breakers.
 """
 from fastapi import APIRouter, HTTPException
-from backend.services.resilience_service import ResilienceService
-from backend.services.huggingface_service import verify_hf_connection_async
-from backend.common.router_utils import handle_errors  # Manejo centralizado de errores
 import logging
 import asyncio
+import sys
+import os
+
+# Add the parent directory to sys.path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import services and utilities
+from services.resilience_service import ResilienceService
+from services.huggingface_service import verify_hf_connection_async
+from common.router_utils import handle_errors  # Centralized error handling
 
 logger = logging.getLogger(__name__)
 

@@ -2,13 +2,20 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, File, UploadFile
 import logging
 import json
 import uuid
-from backend.services.chat_service import get_llm_response
-from backend.services.audio_service import speech_to_text, text_to_speech
-from backend.utils import encode_audio_to_base64, create_error_response
+import sys
+import os
+
+# Add the parent directory to sys.path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import services and utilities
+from services.chat_service import get_llm_response
+from services.audio_service import speech_to_text, text_to_speech
+from utils import encode_audio_to_base64, create_error_response
 from fastapi.responses import JSONResponse
-from backend.routes import WS_DETECT_AUDIO, WS_CHAT
-from backend.models import TextMessage, AudioMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
-from backend.common.router_utils import handle_errors
+from routes import WS_DETECT_AUDIO, WS_CHAT
+from models import TextMessage, AudioMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
+from common.router_utils import handle_errors
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

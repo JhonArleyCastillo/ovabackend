@@ -5,10 +5,15 @@ import datetime
 import sys
 import platform
 import psutil
-# Importar las rutas definidas
-from backend.routes import STATUS_ROUTE
-from backend.services.huggingface_service import HuggingFaceService
-from backend.common.router_utils import handle_errors
+import os
+
+# Add the parent directory to sys.path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import routes and services
+from routes import STATUS_ROUTE
+from services.huggingface_service import HuggingFaceService
+from common.router_utils import handle_errors
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

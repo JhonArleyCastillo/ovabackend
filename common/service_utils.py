@@ -6,12 +6,17 @@ import logging
 from typing import Any, Callable, Dict, Optional, Union
 from functools import wraps
 import time
+import sys
+import os
 
-from backend.services.resilience_service import ResilienceService
+# Add the parent directory to sys.path to allow imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from services.resilience_service import ResilienceService
 from fastapi import HTTPException, UploadFile, Request
 import io
 from PIL import Image
-from backend.utils import validate_image_magic_bytes
+from utils import validate_image_magic_bytes
 
 logger = logging.getLogger(__name__)
 

@@ -1,19 +1,21 @@
 """
-Rutas API para la gestión de usuarios/suscriptores.
+API routes for user/subscriber management.
 
-Este archivo define los endpoints para registrar usuarios mediante su correo electrónico
-y gestionar la lista de suscriptores.
+This file defines endpoints for registering users via email
+and managing the subscriber list.
 """
 
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 import mysql.connector
-
-# Cambiado de importaciones relativas a absolutas
 import sys
 import os
+
+# Add the parent directory to sys.path to allow imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from backend.database import get_db
+
+# Import modules
+from database import get_db
 import db_models, schemas, auth
 
 router = APIRouter(
