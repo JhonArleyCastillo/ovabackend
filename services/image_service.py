@@ -146,29 +146,43 @@ async def process_sign_language(image: Image.Image) -> dict:
 def recognize_sign_language(image: np.ndarray) -> dict:
     """Reconoce lenguaje de señas en una imagen."""
     try:
-        client = hf_client()
-        # Lógica real para llamar al modelo
-        # _, img_encoded = cv2.imencode('.jpg', image)
-        # image_bytes = img_encoded.tobytes()
-        # response = client.image_classification(image_bytes, model=DEFAULT_SIGN_LANGUAGE_MODEL)
-        
-        # Simulación
-        response = [{'label': 'A', 'score': 0.95}, {'label': 'Hola', 'score': 0.03}]
-        
-        if not response:
-            raise ValueError("La respuesta del modelo de señas está vacía")
+        import os
+        import keras
+        from PIL import Image, ImageEnhance, ImageFilter
+        import numpy as np
+        os.environ["KERAS_BACKEND"] = "jax"
+        # Cargar modelo solo una vez (mejora de rendimiento)
+        if not hasattr(recognize_sign_language, "_hf_model"):
+            recognize_sign_language._hf_model = keras.saving.load_model("hf://JhonArleyCastilloV/ASL_model_1")
+        model = recognize_sign_language._hf_model
 
-        main_prediction = response[0]
-        alternatives_raw = response[1:]
-        
+        # Preprocesar imagen (igual que en predict_hf.py)
+        img = Image.fromarray(image).convert("RGB")
+        img = img.resize((224, 224), Image.LANCZOS)
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.3)
+        enhancer = ImageEnhance.Brightness(img)
+        img = enhancer.enhance(1.1)
+        img = img.filter(ImageFilter.SHARPEN)
+        img_array = np.array(img) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
+
+        # Predicción
+        predictions = model(img_array, training=False).numpy()
+        classes = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        classes.extend(["nothing", "del", "space"])
+        class_idx = np.argmax(predictions[0])
+        prob = predictions[0][class_idx]
+        class_name = classes[class_idx] if class_idx < len(classes) else f"Clase {class_idx}"
+        # Top 3 alternativas
+        top_indices = np.argsort(predictions[0])[::-1][:3]
         alternatives = [
-            {"simbolo": alt['label'], "probabilidad": round(alt['score'] * 100, 2)}
-            for alt in alternatives_raw
+            {"simbolo": classes[i] if i < len(classes) else f"Clase {i}", "probabilidad": round(float(predictions[0][i]) * 100, 2)}
+            for i in top_indices if i != class_idx
         ]
-
         result = {
-            "resultado": main_prediction['label'],
-            "confianza": round(main_prediction['score'] * 100, 2),
+            "resultado": class_name,
+            "confianza": round(float(prob) * 100, 2),
             "alternativas": alternatives
         }
         logger.info(f"Lenguaje de señas reconocido: {result['resultado']}")

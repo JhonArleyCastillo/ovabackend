@@ -12,6 +12,9 @@ import logging
 import secrets
 from typing import Optional
 from dotenv import load_dotenv
+os.environ["KERAS_BACKEND"] = "jax"
+import keras
+from huggingface_hub import login
 
 # Load environment variables from .env file
 load_dotenv()
@@ -59,12 +62,7 @@ else:
 # ===== Hugging Face API Configuration =====
 # AI model configuration for various services
 HF_API_KEY: Optional[str] = os.getenv("HF_API_KEY")
-HF_MODELO_LLM: Optional[str] = os.getenv("HF_MODELO_LLM")
-HF_MODELO_TTS: Optional[str] = os.getenv("HF_MODELO_TTS")
-HF_MODELO_STT: Optional[str] = os.getenv("HF_MODELO_STT")
-HF_MODELO_IMG: Optional[str] = os.getenv("HF_MODELO_IMG")
-HF_MODELO_SIGN: str = os.getenv("HF_MODELO_SIGN", "RavenOnur/Sign-Language")
-
+model = os.getenv["model"]
 # ===== Configuración de CORS =====
 # Definir orígenes permitidos según el entorno
 _raw_origins = os.getenv("ALLOWED_ORIGINS", 
@@ -100,11 +98,7 @@ if not IS_DEVELOPMENT:
     # Validar Hugging Face
     missing_hf = [k for k,v in {
         'HF_API_KEY': HF_API_KEY,
-        'HF_MODELO_LLM': HF_MODELO_LLM,
-        'HF_MODELO_TTS': HF_MODELO_TTS,
-        'HF_MODELO_STT': HF_MODELO_STT,
-        'HF_MODELO_IMG': HF_MODELO_IMG,
-        'HF_MODELO_SIGN': HF_MODELO_SIGN
+        'model': model
     }.items() if not v]
     if missing_hf:
         logger.error(f"Faltan variables HF en producción: {missing_hf}")

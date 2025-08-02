@@ -15,6 +15,7 @@ from common.service_utils import load_and_validate_image
 from routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
 from utils import validate_image_magic_bytes
 from common.router_utils import handle_errors  # Centralized error handling
+from services.asl_model_service import predict_from_bytes
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -22,7 +23,11 @@ logger = logging.getLogger(__name__)
 # Tipos MIME permitidos para imágenes
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/api/image",
+    tags=["imagen"],
+    responses={404: {"description": "Recurso no encontrado"}}
+)
 
 @router.post(PROCESS_IMAGE_ROUTE)
 @handle_errors
@@ -49,3 +54,15 @@ async def analyze_sign_language(file: UploadFile = File(...)):
     image = await load_and_validate_image(file, ALLOWED_IMAGE_TYPES)
     # Analizar el lenguaje de señas
     return await process_sign_language(image)
+
+@router.post("/asl/predict")
+async def predict_asl(file: UploadFile = File(...)):
+    """
+    Recibe una imagen y retorna la predicción de la seña usando el modelo de Hugging Face.
+    """
+    try:
+        image_bytes = io.BytesIO(await file.read())
+        result = predict_from_bytes(image_bytes)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -13,6 +13,7 @@ from backend.routers import status_router, websocket_router, image_router, auth_
 from backend.logging_config import configure_logging
 from backend.database import setup_database
 import backend.db_models as db_models
+from routers import image_router
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -23,6 +24,8 @@ app = FastAPI(
     description="API para interactuar con un asistente IA usando voz, texto e imágenes.",
     version="1.0.0"
 )
+
+app.include_router(image_router.router)
 
 # Configurar CORS con diferentes configuraciones según el entorno
 logger.info(f"Configurando CORS con orígenes permitidos: {ALLOWED_ORIGINS}")
