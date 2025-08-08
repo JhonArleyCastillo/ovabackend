@@ -3,10 +3,11 @@ Este archivo contiene funciones de utilidad para diversas tareas como
 configuración inicial, herramientas de mantenimiento, etc.
 """
 
-import base64
-import numpy as np
-import cv2
 import logging
+import numpy as np
+# OpenCV removed for EC2 optimization - using PIL instead
+
+import base64
 import argparse
 import sys
 from database import db_session
@@ -18,31 +19,37 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def decode_base64_image(base64_string: str) -> np.ndarray | None:
-    """Decodifica una imagen en formato base64 a un array numpy."""
+    """Decodifica una imagen en formato base64 a un array numpy usando PIL."""
     try:
         # Eliminar prefijo si existe
         if "base64," in base64_string:
             base64_string = base64_string.split("base64,")[1]
             
         image_bytes = base64.b64decode(base64_string)
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        if img is None:
-            logger.error("La imagen no pudo ser decodificada por OpenCV")
+        # Usar PIL en lugar de OpenCV
+        from PIL import Image
+        import io
+        
+        image_stream = io.BytesIO(image_bytes)
+        pil_image = Image.open(image_stream)
+        
+        # Convertir a RGB si es necesario
+        if pil_image.mode != 'RGB':
+            pil_image = pil_image.convert('RGB')
+            
+        # Convertir a numpy array
+        img = np.array(pil_image)
+        
+        if img is None or img.size == 0:
+            logger.error("La imagen no pudo ser decodificada")
             return None
         return img
     except Exception as e:
         logger.error(f"Error al decodificar imagen base64: {e}")
         return None
 
-def encode_audio_to_base64(audio_bytes: bytes) -> str:
-    """Codifica bytes de audio a formato base64."""
-    try:
-        return base64.b64encode(audio_bytes).decode("utf-8")
-    except Exception as e:
-        logger.error(f"Error al codificar audio a base64: {e}")
-        return ""
+# Audio functions removed for EC2 optimization
 
 def create_error_response(message: str, status_code: int = 500) -> tuple[dict, int]:
     """Crea una respuesta JSON de error estándar."""

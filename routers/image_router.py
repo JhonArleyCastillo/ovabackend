@@ -66,3 +66,41 @@ async def predict_asl(file: UploadFile = File(...)):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/asl/predict_space")
+async def predict_asl_space(file: UploadFile = File(...)):
+    """
+    Endpoint específico para el frontend - Recibe una imagen y retorna la predicción ASL.
+    Utiliza la API de Gradio para el procesamiento optimizado.
+    """
+    try:
+        # Validar tipo de archivo
+        if file.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Tipo de archivo no soportado. Tipos permitidos: {ALLOWED_IMAGE_TYPES}"
+            )
+        
+        # Cargar y validar la imagen
+        image = await load_and_validate_image(file, ALLOWED_IMAGE_TYPES)
+        
+        # Procesar con el servicio optimizado de lenguaje de señas
+        result = await process_sign_language(image)
+        
+        return {
+            "success": True,
+            "prediction": result.get("resultado", "Sin reconocimiento"),
+            "confidence": result.get("confianza", 0.0),
+            "alternatives": result.get("alternativas", []),
+            "message": "Imagen procesada exitosamente"
+        }
+        
+    except HTTPException:
+        # Re-lanzar HTTPExceptions sin modificar
+        raise
+    except Exception as e:
+        logger.error(f"Error en predict_asl_space: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error interno del servidor: {str(e)}"
+        )

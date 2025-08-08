@@ -6,9 +6,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import mysql.connector
 
-from backend.auth import get_current_admin
-from backend.common.database_utils import DbDependency
-from backend.common.error_handlers import ErrorHandler
+from auth import get_current_admin
+from common.database_utils import DbDependency
+from common.error_handlers import ErrorHandler
 
 # Esquema OAuth2 para autenticación por token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")

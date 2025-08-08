@@ -12,9 +12,23 @@ import logging
 import secrets
 from typing import Optional
 from dotenv import load_dotenv
-os.environ["KERAS_BACKEND"] = "jax"
-import keras
-from huggingface_hub import login
+
+# Keras configuration - optional for ML features
+try:
+    os.environ["KERAS_BACKEND"] = "jax"
+    import keras
+    KERAS_AVAILABLE = True
+except ImportError:
+    KERAS_AVAILABLE = False
+    logging.warning("Keras/JAX not available - ML features may be limited")
+
+# Hugging Face login - optional
+try:
+    from huggingface_hub import login
+    HF_LOGIN_AVAILABLE = True
+except ImportError:
+    HF_LOGIN_AVAILABLE = False
+    logging.warning("Hugging Face Hub not available - some AI features may be limited")
 
 # Load environment variables from .env file
 load_dotenv()
@@ -62,7 +76,8 @@ else:
 # ===== Hugging Face API Configuration =====
 # AI model configuration for various services
 HF_API_KEY: Optional[str] = os.getenv("HF_API_KEY")
-model = os.getenv["model"]
+HF_MODEL: Optional[str] = os.getenv("HF_MODEL")
+HF_MODELO_SIGN: str = os.getenv("HF_MODELO_SIGN", "default-sign-language-model")
 # ===== Configuración de CORS =====
 # Definir orígenes permitidos según el entorno
 _raw_origins = os.getenv("ALLOWED_ORIGINS", 
@@ -98,7 +113,7 @@ if not IS_DEVELOPMENT:
     # Validar Hugging Face
     missing_hf = [k for k,v in {
         'HF_API_KEY': HF_API_KEY,
-        'model': model
+        'HF_MODEL': HF_MODEL
     }.items() if not v]
     if missing_hf:
         logger.error(f"Faltan variables HF en producción: {missing_hf}")

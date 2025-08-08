@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 class MessageType(str, Enum):
     """Tipos de mensajes soportados en el sistema."""
     TEXT = "text"                   # Mensaje de texto simple
-    AUDIO = "audio"                 # Mensaje con audio
+    # AUDIO = "audio"               # Removed for EC2 optimization
     IMAGE = "image"                 # Mensaje con imagen
     SIGN_LANGUAGE = "sign_language" # Mensaje de lenguaje de señas
     TYPING = "typing"               # Indicador de "escribiendo..."
@@ -39,12 +39,7 @@ class TextMessage(BaseMessage):
     text: str
     is_user: bool = False
 
-class AudioMessage(BaseMessage):
-    """Mensaje con contenido de audio."""
-    type: MessageType = MessageType.AUDIO
-    text: Optional[str] = None  # Transcripción opcional
-    audio: str  # Audio en formato base64
-    is_user: bool = False
+# AudioMessage removed for EC2 optimization
 
 class ImageMessage(BaseMessage):
     """Mensaje con imagen."""

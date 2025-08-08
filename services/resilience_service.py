@@ -12,12 +12,27 @@ import logging
 from functools import wraps
 import time
 
-# Import Hyx retry functionality for resilience patterns
-from hyx.retry.api import retry
-from hyx.retry.backoffs import expo
-
 # Configure module logger
 logger = logging.getLogger(__name__)
+
+# Import Hyx retry functionality for resilience patterns - optional
+try:
+    from hyx.retry.api import retry
+    from hyx.retry.backoffs import expo
+    HYX_AVAILABLE = True
+except ImportError:
+    HYX_AVAILABLE = False
+    logger.warning("Hyx library not available - using basic retry functionality")
+    
+    # Fallback retry decorator
+    def retry(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator if args else decorator
+    
+    class expo:
+        def __init__(self, *args, **kwargs):
+            pass
 
 
 class ResilienceService:

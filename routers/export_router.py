@@ -8,7 +8,7 @@ import io
 import pandas as pd
 import pdfkit
 
-from backend.common.database_utils import DbDependency, DatabaseManager
+from common.database_utils import DbDependency, DatabaseManager
 
 router = APIRouter(
     prefix="/api/export",

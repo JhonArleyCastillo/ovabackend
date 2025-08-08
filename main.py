@@ -8,12 +8,11 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Importaciones de la aplicación
-from backend.config import ALLOWED_ORIGINS, CORS_MAX_AGE, IS_DEVELOPMENT
-from backend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router, resilience_router
-from backend.logging_config import configure_logging
-from backend.database import setup_database
-import backend.db_models as db_models
-from routers import image_router
+from ovabackend.config import ALLOWED_ORIGINS, CORS_MAX_AGE, IS_DEVELOPMENT
+from ovabackend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router, resilience_router
+from ovabackend.logging_config import configure_logging
+from ovabackend.database import setup_database
+import ovabackend.db_models
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -25,7 +24,8 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.include_router(image_router.router)
+# ❌ REMOVIDO: Registro duplicado de image_router
+# app.include_router(image_router.router)
 
 # Configurar CORS con diferentes configuraciones según el entorno
 logger.info(f"Configurando CORS con orígenes permitidos: {ALLOWED_ORIGINS}")
