@@ -16,6 +16,7 @@ import logging
 import os
 import sqlite3
 from importlib import import_module
+from mysql.connector import errorcode
 
 # Configure module logger
 logger = logging.getLogger(__name__)
@@ -205,124 +206,162 @@ else:
             except Exception:
                 pass
 
-def setup_database():
-    """
-    Configura la base de datos creando las tablas necesarias si no existen.
-    """
-    try:
-        with db_session() as conn:
-            if IS_DEVELOPMENT and USE_SQLITE:
-                # SQLite no tiene soporte para algunos tipos específicos de MySQL
-                # Adaptamos las sentencias para SQLite
-                cursor = conn.cursor()
+    def setup_database():
+        """
+        Configura la base de datos creando las tablas necesarias si no existen.
+        """
+        try:
+            with db_session() as conn:
+                if IS_DEVELOPMENT and USE_SQLITE:
+                    # SQLite no tiene soporte para algunos tipos específicos de MySQL
+                    # Adaptamos las sentencias para SQLite
+                    cursor = conn.cursor()
+                    
+                    # Crear tabla de administradores para SQLite
+                    cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS administradores (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nombre TEXT NOT NULL,
+                        email TEXT UNIQUE NOT NULL,
+                        hashed_password TEXT NOT NULL,
+                        es_superadmin INTEGER DEFAULT 0,
+                        activo INTEGER DEFAULT 1,
+                        fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """)
+                    
+                    # Crear tabla de sesiones de administradores para SQLite
+                    cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sesiones_admin (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        admin_id INTEGER NOT NULL,
+                        token TEXT NOT NULL,
+                        fecha_inicio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        fecha_expiracion TIMESTAMP NOT NULL,
+                        ip_address TEXT,
+                        navegador TEXT,
+                        activa INTEGER DEFAULT 1,
+                        FOREIGN KEY (admin_id) REFERENCES administradores(id) ON DELETE CASCADE
+                    )
+                    """)
+                    
+                    # Crear índices para sesiones_admin
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_token ON sesiones_admin(token)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_admin_id ON sesiones_admin(admin_id)")
+                    
+                    # Crear tabla de contactos para SQLite
+                    cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS contactos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nombre TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        asunto TEXT NOT NULL,
+                        mensaje TEXT NOT NULL,
+                        fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        leido INTEGER DEFAULT 0,
+                        respondido INTEGER DEFAULT 0
+                    )
+                    """)
+                    
+                    # Crear índices para contactos
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_email ON contactos(email)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fecha_envio ON contactos(fecha_envio)")
+                    
+                else:
+                    # MySQL: crear tablas solo si no existen (consultando INFORMATION_SCHEMA)
+                    cursor = conn.cursor()
+
+                    def table_info(name: str):
+                        cursor.execute(
+                            """
+                            SELECT TABLE_NAME, TABLE_TYPE
+                            FROM information_schema.TABLES
+                            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
+                            """,
+                            (name,)
+                        )
+                        return cursor.fetchone()
+
+                    def create_table(name: str, ddl: str):
+                        info = table_info(name)
+                        if info:
+                            table_name, table_type = info
+                            if table_type != 'BASE TABLE':
+                                logger.error(
+                                    f"No se puede crear tabla '{name}': ya existe un objeto tipo {table_type}. "
+                                    f"Renombra o elimina ese objeto primero."
+                                )
+                                return
+                            logger.info(f"Tabla '{name}' ya existe. Omitiendo creación.")
+                            return
+                        try:
+                            cursor.execute(ddl)
+                            logger.info(f"Tabla '{name}' creada correctamente.")
+                        except mysql.connector.Error as e:
+                            if getattr(e, 'errno', None) == errorcode.ER_TABLE_EXISTS_ERROR:
+                                logger.info(f"Tabla '{name}' ya existe (1050). Omitiendo.")
+                            else:
+                                raise
+
+                    create_table(
+                        'administradores',
+                        """
+                        CREATE TABLE administradores (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            nombre VARCHAR(100) NOT NULL,
+                            email VARCHAR(100) UNIQUE NOT NULL,
+                            hashed_password VARCHAR(255) NOT NULL,
+                            es_superadmin BOOLEAN DEFAULT FALSE,
+                            activo BOOLEAN DEFAULT TRUE,
+                            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        )
+                        """
+                    )
+
+                    create_table(
+                        'sesiones_admin',
+                        """
+                        CREATE TABLE sesiones_admin (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            admin_id INT NOT NULL,
+                            token VARCHAR(255) NOT NULL,
+                            fecha_inicio DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            fecha_expiracion DATETIME NOT NULL,
+                            ip_address VARCHAR(45),
+                            navegador VARCHAR(255),
+                            activa BOOLEAN DEFAULT TRUE,
+                            FOREIGN KEY (admin_id) REFERENCES administradores(id) ON DELETE CASCADE,
+                            INDEX (token),
+                            INDEX (admin_id)
+                        )
+                        """
+                    )
+
+                    create_table(
+                        'contactos',
+                        """
+                        CREATE TABLE contactos (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            nombre VARCHAR(100) NOT NULL,
+                            email VARCHAR(100) NOT NULL,
+                            asunto VARCHAR(200) NOT NULL,
+                            mensaje TEXT NOT NULL,
+                            fecha_envio DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            leido BOOLEAN DEFAULT FALSE,
+                            respondido BOOLEAN DEFAULT FALSE,
+                            INDEX (email),
+                            INDEX (fecha_envio)
+                        )
+                        """
+                    )
                 
-                # Crear tabla de administradores para SQLite
-                cursor.execute("""
-                CREATE TABLE IF NOT EXISTS administradores (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    nombre TEXT NOT NULL,
-                    email TEXT UNIQUE NOT NULL,
-                    hashed_password TEXT NOT NULL,
-                    es_superadmin INTEGER DEFAULT 0,
-                    activo INTEGER DEFAULT 1,
-                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """)
+                logger.info("Base de datos configurada correctamente")
                 
-                # Crear tabla de sesiones de administradores para SQLite
-                cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sesiones_admin (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    admin_id INTEGER NOT NULL,
-                    token TEXT NOT NULL,
-                    fecha_inicio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    fecha_expiracion TIMESTAMP NOT NULL,
-                    ip_address TEXT,
-                    navegador TEXT,
-                    activa INTEGER DEFAULT 1,
-                    FOREIGN KEY (admin_id) REFERENCES administradores(id) ON DELETE CASCADE
-                )
-                """)
-                
-                # Crear índices para sesiones_admin
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_token ON sesiones_admin(token)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_admin_id ON sesiones_admin(admin_id)")
-                
-                # Crear tabla de contactos para SQLite
-                cursor.execute("""
-                CREATE TABLE IF NOT EXISTS contactos (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    nombre TEXT NOT NULL,
-                    email TEXT NOT NULL,
-                    asunto TEXT NOT NULL,
-                    mensaje TEXT NOT NULL,
-                    fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    leido INTEGER DEFAULT 0,
-                    respondido INTEGER DEFAULT 0
-                )
-                """)
-                
-                # Crear índices para contactos
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_email ON contactos(email)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_fecha_envio ON contactos(fecha_envio)")
-                
+        except Exception as e:
+            logger.error(f"Error al configurar la base de datos: {e}")
+            if IS_DEVELOPMENT:
+                logger.warning("Error en desarrollo: la aplicación continuará sin base de datos completa")
             else:
-                # MySQL original
-                cursor = conn.cursor()
-                
-                # Crear tabla de administradores
-                cursor.execute("""
-                CREATE TABLE IF NOT EXISTS administradores (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    nombre VARCHAR(100) NOT NULL,
-                    email VARCHAR(100) UNIQUE NOT NULL,
-                    hashed_password VARCHAR(255) NOT NULL,
-                    es_superadmin BOOLEAN DEFAULT FALSE,
-                    activo BOOLEAN DEFAULT TRUE,
-                    fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    fecha_actualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                )
-                """)
-                
-                # Crear tabla de sesiones de administradores
-                cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sesiones_admin (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    admin_id INT NOT NULL,
-                    token VARCHAR(255) NOT NULL,
-                    fecha_inicio DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    fecha_expiracion DATETIME NOT NULL,
-                    ip_address VARCHAR(45),
-                    navegador VARCHAR(255),
-                    activa BOOLEAN DEFAULT TRUE,
-                    FOREIGN KEY (admin_id) REFERENCES administradores(id) ON DELETE CASCADE,
-                    INDEX (token),
-                    INDEX (admin_id)
-                )
-                """)
-                
-                # Crear tabla de contactos
-                cursor.execute("""
-                CREATE TABLE IF NOT EXISTS contactos (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    nombre VARCHAR(100) NOT NULL,
-                    email VARCHAR(100) NOT NULL,
-                    asunto VARCHAR(200) NOT NULL,
-                    mensaje TEXT NOT NULL,
-                    fecha_envio DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    leido BOOLEAN DEFAULT FALSE,
-                    respondido BOOLEAN DEFAULT FALSE,
-                    INDEX (email),
-                    INDEX (fecha_envio)
-                )
-                """)
-            
-            logger.info("Base de datos configurada correctamente")
-            
-    except Exception as e:
-        logger.error(f"Error al configurar la base de datos: {e}")
-        if IS_DEVELOPMENT:
-            logger.warning("Error en desarrollo: la aplicación continuará sin base de datos completa")
-        else:
-            raise
+                raise
