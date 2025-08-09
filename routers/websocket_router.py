@@ -21,6 +21,7 @@ router = APIRouter()
 # Audio WebSocket endpoint removed for lighter deployment
 
 @router.websocket(WS_CHAT)
+@router.websocket("/ws/chat")
 async def chat_websocket(websocket: WebSocket):
     """WebSocket endpoint for text-based chat with enhanced connection management."""
     # Generar ID único para esta conexión
