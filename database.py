@@ -127,29 +127,47 @@ else:
     if not all([DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME]):
         logger.error("Variables de conexión a BD incompletas o no definidas")
 
-    # Configuración del pool de conexiones MySQL
+    # Configuración del pool de conexiones MySQL (ajustada para RDS)
     db_config = {
         'host': DB_HOST,
         'port': int(DB_PORT),
         'user': DB_USER,
         'password': DB_PASSWORD,
         'database': DB_NAME,
-        'connect_timeout': 10,  # Segundos para el timeout de conexión
-        'autocommit': False
+        'connect_timeout': 15,  # Timeout un poco mayor para RDS
+        'autocommit': False,
+        'raise_on_warnings': True,
     }
 
-    # Crear un pool de conexiones
-    try:
-        connection_pool = mysql.connector.pooling.MySQLConnectionPool(
-            pool_name="ova_pool",
-            pool_size=5,
-            **db_config
-        )
-        logger.info("Pool de conexiones MySQL creado correctamente")
-    except Exception as e:
-        logger.error(f"Error al crear el pool de conexiones MySQL: {e}")
-        # Crear un objeto falso para evitar errores en tiempo de ejecución
+    # Tamaño del pool configurable (default bajo para multi-worker)
+    DEFAULT_POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '2'))
+
+    connection_pool = None
+
+    def _init_pool(retries: int = 3, delay: float = 1.0):
+        global connection_pool
+        last_err = None
+        for attempt in range(1, retries + 1):
+            try:
+                pool_name = f"ova_pool_{os.getpid()}"
+                connection_pool = mysql.connector.pooling.MySQLConnectionPool(
+                    pool_name=pool_name,
+                    pool_size=DEFAULT_POOL_SIZE,
+                    **db_config
+                )
+                logger.info(f"Pool MySQL creado: name={pool_name}, size={DEFAULT_POOL_SIZE}")
+                return
+            except Exception as e:
+                last_err = e
+                logger.warning(f"Fallo creando pool MySQL (intento {attempt}/{retries}): {e}")
+                time.sleep(delay)
+        logger.error(f"No se pudo crear el pool MySQL después de {retries} intentos: {last_err}")
         connection_pool = None
+
+    def _ensure_pool():
+        if connection_pool is None:
+            _init_pool()
+        return connection_pool is not None
 
     @contextmanager
     def db_session():
@@ -163,7 +181,7 @@ else:
             items = cursor.fetchall()
         """
         # Verificar si el pool está disponible antes de intentar conexiones
-        if connection_pool is None:
+        if not _ensure_pool():
             raise RuntimeError("El pool de conexiones de base de datos no está disponible.")
         
         max_retries = 3
@@ -210,7 +228,7 @@ else:
             cursor.close()
             return items
         """
-        if connection_pool is None:
+        if not _ensure_pool():
             # Fallar rápidamente si el pool no está disponible
             raise RuntimeError("El pool de conexiones de base de datos no está disponible.")
         

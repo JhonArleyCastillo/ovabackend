@@ -30,6 +30,7 @@ async def read_root(request: Request):
     }
 
 @router.get(STATUS_ROUTE)
+@router.get(f"/api{STATUS_ROUTE}")
 @handle_errors
 async def get_status():
     """

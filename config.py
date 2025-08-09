@@ -70,9 +70,15 @@ HF_MODEL: Optional[str] = os.getenv("HF_MODEL")
 HF_MODELO_SIGN: str = os.getenv("HF_MODELO_SIGN", "default-sign-language-model")
 # ===== Configuración de CORS =====
 # Definir orígenes permitidos según el entorno
-_raw_origins = os.getenv("ALLOWED_ORIGINS", 
-                          "https://helpova.web.app,http://localhost:3000,https://3.15.5.52,https://3.15.5.52:8000," + 
-                          "https://api.ovaonline.tech,http://api.ovaonline.tech").split(",")
+_raw_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    ",".join([
+        "https://helpova.web.app",
+        "http://localhost:3000",
+        "https://www.api.ovaonline.tech",
+        "https://www.api.ovaonline.tech:8000"
+    ])
+).split(",")
 
 # En producción, filtrar para permitir solo orígenes HTTPS (excepto localhost)
 if not IS_DEVELOPMENT:

@@ -94,10 +94,8 @@ async def startup_event():
         logger.info("Base de datos inicializada correctamente")
     except Exception as e:
         logger.error(f"Error al inicializar la base de datos: {e}")
-        if not IS_DEVELOPMENT:
-            sys.exit(1)
-        else:
-            logger.warning("Continuando ejecución en modo desarrollo a pesar del error de BD")
+        # No detener el servidor: permitir que WS/HTTP sigan funcionando
+        logger.warning("Continuando ejecución sin inicialización completa de BD. Verificar RDS/credenciales.")
     
     logger.info("Servidor iniciado correctamente")
 

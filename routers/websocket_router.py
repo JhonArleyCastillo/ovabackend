@@ -154,6 +154,7 @@ async def chat_websocket(websocket: WebSocket):
         logger.info(f"🧹 Limpieza finalizada para conexión {connection_id} - Mensajes procesados: {message_count}")
 
 @router.get("/chat/health")
+@router.get("/api/chat/health")
 async def websocket_health_check():
     """Endpoint para verificar el estado del servicio WebSocket"""
     return {
