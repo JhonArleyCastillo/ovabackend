@@ -12,16 +12,6 @@ import logging
 import secrets
 from typing import Optional
 from dotenv import load_dotenv
-
-# Keras configuration - optional for ML features
-try:
-    os.environ["KERAS_BACKEND"] = "jax"
-    import keras
-    KERAS_AVAILABLE = True
-except ImportError:
-    KERAS_AVAILABLE = False
-    logging.warning("Keras/JAX not available - ML features may be limited")
-
 # Hugging Face login - optional
 try:
     from huggingface_hub import login

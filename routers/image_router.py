@@ -15,7 +15,7 @@ from common.service_utils import load_and_validate_image
 from routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
 from utils import validate_image_magic_bytes
 from common.router_utils import handle_errors  # Centralized error handling
-from services.asl_model_service import predict_from_bytes
+# Local ASL model removed in favor of gradio_client-only flow to reduce deps
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -58,14 +58,35 @@ async def analyze_sign_language(file: UploadFile = File(...)):
 @router.post("/asl/predict")
 async def predict_asl(file: UploadFile = File(...)):
     """
-    Recibe una imagen y retorna la predicción de la seña usando el modelo de Hugging Face.
+    Predicción ASL usando exclusivamente la API de Gradio (sin modelo local).
+    Alias de compatibilidad para el frontend antiguo.
     """
     try:
-        image_bytes = io.BytesIO(await file.read())
-        result = predict_from_bytes(image_bytes)
-        return result
+        # Validar tipo de archivo
+        if file.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tipo de archivo no soportado. Tipos permitidos: {ALLOWED_IMAGE_TYPES}"
+            )
+
+        # Cargar y validar la imagen
+        image = await load_and_validate_image(file, ALLOWED_IMAGE_TYPES)
+
+        # Procesar con el servicio optimizado de lenguaje de señas (gradio_client)
+        result = await process_sign_language(image)
+
+        return {
+            "success": True,
+            "prediction": result.get("resultado", "Sin reconocimiento"),
+            "confidence": result.get("confianza", 0.0),
+            "alternatives": result.get("alternativas", []),
+            "message": "Imagen procesada exitosamente"
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error en predict_asl: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
 @router.post("/asl/predict_space")
 async def predict_asl_space(file: UploadFile = File(...)):
