@@ -11,10 +11,18 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import routes and services
-from routes import STATUS_ROUTE
-from services.huggingface_service import HuggingFaceService
-from common.router_utils import handle_errors
-from database import db_session
+try:
+    from ..routes import STATUS_ROUTE
+    from ..services.huggingface_service import HuggingFaceService
+    from ..common.router_utils import handle_errors
+except ImportError:
+    from routes import STATUS_ROUTE
+    from services.huggingface_service import HuggingFaceService
+    from common.router_utils import handle_errors
+try:
+    from ..database import db_session  # package import
+except ImportError:
+    from database import db_session  # fallback for altered sys.path
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

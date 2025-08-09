@@ -17,11 +17,18 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import modules
-from common.database_utils import DatabaseManager, DbDependency
-from auth import get_current_admin
-from schemas import ContactoCreate, ContactoResponse, ContactoUpdate
-from db_models import ContactoModel
-from common.router_utils import handle_errors
+try:
+    from ..common.database_utils import DatabaseManager, DbDependency
+    from ..auth import get_current_admin
+    from ..schemas import ContactoCreate, ContactoResponse, ContactoUpdate
+    from ..db_models import ContactoModel
+    from ..common.router_utils import handle_errors
+except ImportError:
+    from common.database_utils import DatabaseManager, DbDependency
+    from auth import get_current_admin
+    from schemas import ContactoCreate, ContactoResponse, ContactoUpdate
+    from db_models import ContactoModel
+    from common.router_utils import handle_errors
 from pydantic import BaseModel, EmailStr
 
 # Configure module logger

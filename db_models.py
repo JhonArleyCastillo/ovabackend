@@ -9,7 +9,10 @@ Este archivo contiene clases para interactuar con las tablas de la base de datos
 
 from typing import List, Dict, Any, Optional
 import datetime
-from database import db_session
+try:
+    from .database import db_session
+except ImportError:
+    from database import db_session
 from security_utils import get_password_hash, verify_password
 import mysql.connector
 

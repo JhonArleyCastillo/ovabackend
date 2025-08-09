@@ -22,21 +22,36 @@ from mysql.connector import errorcode
 logger = logging.getLogger(__name__)
 
 # Import configuration variables from config module
-from config import (
-    DB_HOST, 
-    DB_PORT, 
-    DB_USER, 
-    DB_PASSWORD, 
-    DB_NAME, 
-    IS_DEVELOPMENT
-)
+try:
+    # When imported as part of the ovabackend package
+    from .config import (
+        DB_HOST,
+        DB_PORT,
+        DB_USER,
+        DB_PASSWORD,
+        DB_NAME,
+        IS_DEVELOPMENT,
+    )
+except ImportError:
+    # When imported as a top-level module via sys.path manipulation elsewhere
+    from config import (
+        DB_HOST,
+        DB_PORT,
+        DB_USER,
+        DB_PASSWORD,
+        DB_NAME,
+        IS_DEVELOPMENT,
+    )
 
 # Check for SQLite development configuration
 try:
-    from config import USE_SQLITE, SQLITE_PATH
+    from .config import USE_SQLITE, SQLITE_PATH
 except ImportError:
-    USE_SQLITE: bool = False
-    SQLITE_PATH: Optional[str] = None
+    try:
+        from config import USE_SQLITE, SQLITE_PATH
+    except ImportError:
+        USE_SQLITE: bool = False
+        SQLITE_PATH: Optional[str] = None
 
 # SQLite database configuration for development environment
 if IS_DEVELOPMENT and USE_SQLITE:
@@ -121,6 +136,63 @@ if IS_DEVELOPMENT and USE_SQLITE:
     
     # Crear un objeto connection_pool ficticio para compatibilidad
     connection_pool = True
+
+    def setup_database():
+        """
+        Setup minimal SQLite schema compatible with the MySQL schema used in production.
+        Safe to call multiple times (CREATE IF NOT EXISTS).
+        """
+        try:
+            with db_session() as conn:
+                cursor = conn.cursor()
+                # Administradores
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS administradores (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    hashed_password TEXT NOT NULL,
+                    es_superadmin INTEGER DEFAULT 0,
+                    activo INTEGER DEFAULT 1,
+                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """)
+                # Sesiones admin
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sesiones_admin (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    admin_id INTEGER NOT NULL,
+                    token TEXT NOT NULL,
+                    fecha_inicio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_expiracion TIMESTAMP NOT NULL,
+                    ip_address TEXT,
+                    navegador TEXT,
+                    activa INTEGER DEFAULT 1,
+                    FOREIGN KEY (admin_id) REFERENCES administradores(id) ON DELETE CASCADE
+                )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_token ON sesiones_admin(token)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_admin_id ON sesiones_admin(admin_id)")
+                # Contactos
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS contactos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    asunto TEXT NOT NULL,
+                    mensaje TEXT NOT NULL,
+                    fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    leido INTEGER DEFAULT 0,
+                    respondido INTEGER DEFAULT 0
+                )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_email ON contactos(email)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_fecha_envio ON contactos(fecha_envio)")
+                logger.info("SQLite database schema ensured.")
+        except Exception as e:
+            logger.error(f"Error setting up SQLite database: {e}")
+            raise
 
 # MySQL para producción o desarrollo con MySQL (sin pool: conexión por solicitud)
 else:

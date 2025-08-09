@@ -17,20 +17,32 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import modules
-from common.database_utils import DatabaseManager, DbDependency
-from common.router_utils import handle_errors
-from common.service_utils import extract_client_info
-from common.auth_utils import build_token_response
-from services.admin_service import (
-    create_admin as service_create_admin, 
-    list_admins as service_list_admins, 
-    authenticate_admin as service_authenticate_admin, 
-    update_admin as service_update_admin
-)
-from common.router_utils import require_superadmin
-import auth
-import schemas
-import db_models
+try:
+    from ..common.database_utils import DatabaseManager, DbDependency
+    from ..common.router_utils import handle_errors, require_superadmin
+    from ..common.service_utils import extract_client_info
+    from ..common.auth_utils import build_token_response
+    from ..services.admin_service import (
+        create_admin as service_create_admin,
+        list_admins as service_list_admins,
+        authenticate_admin as service_authenticate_admin,
+        update_admin as service_update_admin,
+    )
+    from .. import auth, schemas, db_models
+except ImportError:
+    from common.database_utils import DatabaseManager, DbDependency
+    from common.router_utils import handle_errors, require_superadmin
+    from common.service_utils import extract_client_info
+    from common.auth_utils import build_token_response
+    from services.admin_service import (
+        create_admin as service_create_admin,
+        list_admins as service_list_admins,
+        authenticate_admin as service_authenticate_admin,
+        update_admin as service_update_admin,
+    )
+    import auth
+    import schemas
+    import db_models
 
 # Configure router with proper prefix and metadata
 router = APIRouter(

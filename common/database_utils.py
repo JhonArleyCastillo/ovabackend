@@ -13,7 +13,10 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import database module
-from database import get_db
+try:
+    from ..database import get_db  # when imported as package
+except ImportError:
+    from database import get_db  # fallback when sys.path was altered
 
 logger = logging.getLogger(__name__)
 

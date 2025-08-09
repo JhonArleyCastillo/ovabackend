@@ -12,9 +12,14 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import services and utilities
-from services.resilience_service import ResilienceService
-from services.huggingface_service import verify_hf_connection_async
-from common.router_utils import handle_errors  # Centralized error handling
+try:
+    from ..services.resilience_service import ResilienceService
+    from ..services.huggingface_service import verify_hf_connection_async
+    from ..common.router_utils import handle_errors  # Centralized error handling
+except ImportError:
+    from services.resilience_service import ResilienceService
+    from services.huggingface_service import verify_hf_connection_async
+    from common.router_utils import handle_errors  # Centralized error handling
 
 logger = logging.getLogger(__name__)
 

@@ -18,7 +18,10 @@ from config import (
     JWT_ALGORITHM, 
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from database import get_db
+try:
+    from .database import get_db
+except ImportError:
+    from database import get_db
 import db_models
 from db_models import SesionAdminModel
 import schemas

@@ -9,11 +9,18 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import services and utilities
-from services.chat_service import get_llm_response
-from utils import create_error_response
-from routes import WS_CHAT
-from models import TextMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
-from common.router_utils import handle_errors
+try:
+    from ..services.chat_service import get_llm_response
+    from ..utils import create_error_response
+    from ..routes import WS_CHAT
+    from ..models import TextMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
+    from ..common.router_utils import handle_errors
+except ImportError:
+    from services.chat_service import get_llm_response
+    from utils import create_error_response
+    from routes import WS_CHAT
+    from models import TextMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
+    from common.router_utils import handle_errors
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

@@ -70,6 +70,7 @@ if not HF_ASL_SPACE_URL:
 # ===== CORS =====
 _default_origins = [
     "https://helpova.web.app",
+    "https://api.ovaonline.tech",
     "https://www.api.ovaonline.tech",
     "http://localhost:3000",
     "http://127.0.0.1:3000",

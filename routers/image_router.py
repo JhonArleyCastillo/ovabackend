@@ -10,11 +10,18 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import services and utilities
-from services.image_service import analyze_image, process_sign_language
-from common.service_utils import load_and_validate_image
-from routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
-from utils import validate_image_magic_bytes
-from common.router_utils import handle_errors  # Centralized error handling
+try:
+    from ..services.image_service import analyze_image, process_sign_language
+    from ..common.service_utils import load_and_validate_image
+    from ..routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
+    from ..utils import validate_image_magic_bytes
+    from ..common.router_utils import handle_errors  # Centralized error handling
+except ImportError:
+    from services.image_service import analyze_image, process_sign_language
+    from common.service_utils import load_and_validate_image
+    from routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
+    from utils import validate_image_magic_bytes
+    from common.router_utils import handle_errors  # Centralized error handling
 # Local ASL model removed in favor of gradio_client-only flow to reduce deps
 
 # Configurar logging
