@@ -26,99 +26,71 @@ load_dotenv()
 # Configure module logger
 logger = logging.getLogger(__name__)
 
-# ===== Environment Configuration =====
-ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-IS_DEVELOPMENT: bool = ENVIRONMENT == "development"
+import os
+import logging
+from typing import Optional
+from dotenv import load_dotenv
 
-# ===== Database Configuration =====
-# Environment-specific database configuration with secure defaults
-if IS_DEVELOPMENT:
-    # Development environment defaults for local testing
-    DB_HOST: str = os.getenv("DB_HOST", "localhost")
-    DB_PORT: int = int(os.getenv("DB_PORT", "3306"))
-    DB_USER: str = os.getenv("DB_USER", "root")
-    DB_PASSWORD: str = os.getenv("DB_PASSWORD", "password")
-    DB_NAME: str = os.getenv("DB_NAME", "ovaweb_dev")
-    
-    # SQLite alternative for lightweight development
-    USE_SQLITE: bool = os.getenv("USE_SQLITE", "false").lower() == "true"
-    SQLITE_PATH: str = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), 
-        'dev_database.sqlite'
-    )
-    
-    logger.info(
-        f"Development configuration: "
-        f"{'SQLite' if USE_SQLITE else 'MySQL'} database"
-    )
+# Cargar .env
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+# ===== Entorno =====
+ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
+IS_DEVELOPMENT: bool = ENVIRONMENT.lower() == "development"
+
+# ===== Base de Datos =====
+# Para desarrollo simple, se puede usar SQLite con USE_SQLITE=true
+USE_SQLITE: bool = os.getenv("USE_SQLITE", "false").lower() == "true"
+if USE_SQLITE:
+    SQLITE_PATH: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dev_database.sqlite')
+    DB_HOST = DB_PORT = DB_USER = DB_PASSWORD = DB_NAME = None  # No se usan en SQLite
+    logger.info(f"DB: SQLite en {SQLITE_PATH}")
 else:
-    # Production requires explicit configuration for security
     DB_HOST: Optional[str] = os.getenv("DB_HOST")
-    DB_PORT: int = int(os.getenv("DB_PORT", "3306")) 
+    DB_PORT: int = int(os.getenv("DB_PORT", "3306"))
     DB_USER: Optional[str] = os.getenv("DB_USER")
     DB_PASSWORD: Optional[str] = os.getenv("DB_PASSWORD")
     DB_NAME: Optional[str] = os.getenv("DB_NAME")
-    
-    # SQLite not recommended for production
-    USE_SQLITE: bool = False
-    SQLITE_PATH: Optional[str] = None
+    logger.info(f"DB: MySQL en host={DB_HOST}, puerto={DB_PORT}")
 
-# ===== Hugging Face API Configuration =====
-# AI model configuration for various services
-HF_API_KEY: Optional[str] = os.getenv("HF_API_KEY")
-HF_MODEL: Optional[str] = os.getenv("HF_MODEL")
-HF_MODELO_SIGN: str = os.getenv("HF_MODELO_SIGN", "default-sign-language-model")
-# ===== Configuración de CORS =====
-# Definir orígenes permitidos según el entorno
-_raw_origins = os.getenv(
-    "ALLOWED_ORIGINS",
-    ",".join([
-        "https://helpova.web.app",
-        "http://localhost:3000",
-        "https://www.api.ovaonline.tech",
-        "https://www.api.ovaonline.tech:8000"
-    ])
-).split(",")
+# ===== Hugging Face / Modelos =====
+HF_API_KEY: Optional[str] = os.getenv("HF_API_KEY")  # opcional para InferenceClient
+HF_MODEL: Optional[str] = os.getenv("HF_MODEL")       # opcional para texto/caption si se usa
+HF_MODELO_SIGN: str = os.getenv("HF_MODELO_SIGN", "default-sign-language-model")  # legado
+# Space Gradio para ASL (usado por gradio_client). Acepta URL completa.
+HF_ASL_SPACE_URL: str = os.getenv(
+    "HF_ASL_SPACE_URL",
+    "https://jhonarleycastillov-asl-image.hf.space"
+)
+if not HF_ASL_SPACE_URL:
+    logger.warning("HF_ASL_SPACE_URL no definido; el reconocimiento ASL no funcionará.")
 
-# En producción, filtrar para permitir solo orígenes HTTPS (excepto localhost)
+# ===== CORS =====
+_default_origins = [
+    "https://helpova.web.app",
+    "https://www.api.ovaonline.tech",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+_raw_origins = os.getenv("ALLOWED_ORIGINS", ",".join(_default_origins)).split(",")
+# En producción, filtrar a HTTPS + localhost; en dev, dejar lista tal cual
 if not IS_DEVELOPMENT:
-    ALLOWED_ORIGINS = [origin for origin in _raw_origins if origin.startswith("https://") or "localhost" in origin]
-    # Registrar los orígenes filtrados
-    logger.info(f"Modo producción: Filtrando orígenes para permitir solo HTTPS: {ALLOWED_ORIGINS}")
+    ALLOWED_ORIGINS = [o.strip() for o in _raw_origins if o.strip().startswith("https://") or "localhost" in o]
 else:
-    ALLOWED_ORIGINS = _raw_origins
-    logger.info(f"Modo desarrollo: Permitiendo todos los orígenes configurados: {ALLOWED_ORIGINS}")
+    ALLOWED_ORIGINS = [o.strip() for o in _raw_origins]
+logger.info(f"CORS orígenes permitidos: {ALLOWED_ORIGINS}")
 
 CORS_MAX_AGE = int(os.getenv("CORS_MAX_AGE", "3600"))
 
-# ===== Configuración JWT =====
+# ===== JWT =====
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretkey")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
-# Verificar configuración JWT segura
-if JWT_SECRET_KEY == "supersecretkey":
-    logger.warning("JWT_SECRET_KEY está usando el valor predeterminado. Se recomienda cambiarlo en producción.")
+if JWT_SECRET_KEY == "supersecretkey" and not IS_DEVELOPMENT:
+    logger.warning("JWT_SECRET_KEY usa valor por defecto; cámbialo en producción.")
+# ===== Configuración JWT =====
 
-# ===== Validaciones en Producción =====
-if not IS_DEVELOPMENT:
-    # Validar configuración de base de datos
-    if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME]):
-        logger.error("Faltan variables de entorno de base de datos en producción.")
-        raise EnvironmentError("Configuración de base de datos incompleta para producción.")
-    # Validar Hugging Face
-    missing_hf = [k for k,v in {
-        'HF_API_KEY': HF_API_KEY,
-        'HF_MODEL': HF_MODEL
-    }.items() if not v]
-    if missing_hf:
-        logger.error(f"Faltan variables HF en producción: {missing_hf}")
-        raise EnvironmentError(f"Variables HF requeridas no definidas: {missing_hf}")
-    # Validar JWT
-    if JWT_SECRET_KEY == "supersecretkey":
-        logger.error("JWT_SECRET_KEY está usando el valor predeterminado en producción.")
-        raise EnvironmentError("Debe configurar JWT_SECRET_KEY seguro en producción.")
-    # Ajustar CORS para producción (solo HTTPS except localhost)
-    ALLOWED_ORIGINS = [origin for origin in _raw_origins if origin.startswith("https://") or "localhost" in origin]
-    logger.info(f"Modo producción: Orígenes permitidos: {ALLOWED_ORIGINS}")
-
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretkey")

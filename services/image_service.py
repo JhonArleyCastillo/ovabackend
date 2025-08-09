@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from .huggingface_service import hf_client, hf_client_async
 from .resilience_service import ResilienceService
-from config import HF_MODELO_SIGN
+from config import HF_MODELO_SIGN, HF_ASL_SPACE_URL
 
 # Configure module logger
 logger = logging.getLogger(__name__)
@@ -160,34 +160,29 @@ def recognize_sign_language(image: np.ndarray) -> dict:
     try:
         from gradio_client import Client, handle_file
         import tempfile
-        import os
-        from PIL import Image
-        
+
         # Convertir numpy array a PIL Image
         pil_image = Image.fromarray(image).convert("RGB")
-        
+
         # Guardar temporalmente la imagen
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
             pil_image.save(tmp_file.name, format='PNG')
             temp_path = tmp_file.name
-        
+
         try:
-            # Conectar al modelo ASL en Hugging Face
-            logger.info("🔍 Conectando al modelo ASL en Hugging Face...")
-            client = Client("JhonArleyCastilloV/ASL_image")
-            
+            # Conectar al Space ASL en Hugging Face (URL completa desde config)
+            logger.info("🔍 Conectando al Space ASL en Hugging Face...")
+            client = Client(HF_ASL_SPACE_URL)
+
             # Realizar predicción
             logger.info("📸 Enviando imagen para reconocimiento ASL...")
-            result = client.predict(
-                image=handle_file(temp_path),
-                api_name="/predict"
-            )
-            
+            result = client.predict(image=handle_file(temp_path), api_name="/predict")
+
             # Procesar resultado
             if result and len(result) > 0:
                 # El resultado viene como una lista, tomar el primer elemento
                 prediction_result = result[0] if isinstance(result, list) else result
-                
+
                 # Procesar según el formato que retorna el modelo
                 if isinstance(prediction_result, dict):
                     return {
@@ -209,22 +204,21 @@ def recognize_sign_language(image: np.ndarray) -> dict:
                     "confianza": 0.0,
                     "alternativas": []
                 }
-                
+
         finally:
             # Limpiar archivo temporal
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
-        
+
     except Exception as e:
         logger.error(f"Error al reconocer lenguaje de señas con API Gradio: {e}")
         # Fallback a respuesta por defecto
         return {
-            "resultado": "Error en reconocimiento", 
+            "resultado": "Error en reconocimiento",
             "confianza": 0.0,
             "alternativas": [],
             "error": str(e)
         }
-        return {"error": f"Error en el análisis de señas: {str(e)}"}
 
 def detect_objects(image: np.ndarray) -> list | dict:
     """Detecta objetos en una imagen."""
