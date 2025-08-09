@@ -1,9 +1,9 @@
 """
-Resilience service using Hyx for handling multiple consecutive failures.
+Resilience service for handling multiple consecutive failures.
 
-This module implements resilience patterns including retry with exponential
-backoff and circuit breaker simulation for external service calls.
-It provides decorators and utilities for handling service failures gracefully.
+Implements resilience patterns including retry with exponential backoff and
+circuit breaker simulation for external service calls. Pure-Python implementation
+without external dependencies.
 """
 
 import asyncio
@@ -15,24 +15,10 @@ import time
 # Configure module logger
 logger = logging.getLogger(__name__)
 
-# Import Hyx retry functionality for resilience patterns - optional
-try:
-    from hyx.retry.api import retry
-    from hyx.retry.backoffs import expo
-    HYX_AVAILABLE = True
-except ImportError:
-    HYX_AVAILABLE = False
-    logger.warning("Hyx library not available - using basic retry functionality")
-    
-    # Fallback retry decorator
-    def retry(*args, **kwargs):
-        def decorator(func):
-            return func
-        return decorator if args else decorator
-    
-    class expo:
-        def __init__(self, *args, **kwargs):
-            pass
+def _compute_backoff_delay(attempt: int, *, min_delay: float, base: float, max_delay: float) -> float:
+    """Compute exponential backoff delay with clamping."""
+    delay = min_delay * (base ** (attempt - 1))
+    return delay if delay < max_delay else max_delay
 
 
 class ResilienceService:
@@ -43,7 +29,7 @@ class ResilienceService:
     failure tracking for external service calls.
     """
     
-    # Circuit breaker state simulation (Hyx 0.0.2 has basic functionality)
+    # Circuit breaker state simulation
     _circuit_breaker_state: Dict[str, Union[int, float, bool]] = {
         "failure_count": 0,
         "last_failure_time": None,
@@ -104,7 +90,7 @@ class ResilienceService:
     def resilient_hf_call(
         timeout_seconds: float = 30.0,
         retry_attempts: int = 3,
-        fallback_response: Optional[str] = None
+        fallback_response: Optional[Any] = None
     ):
         """
         Decorador que aplica patrones de resiliencia a llamadas de Hugging Face.
@@ -124,13 +110,13 @@ class ResilienceService:
                         return fallback_response
                     raise ConnectionError("Circuit breaker está abierto")
 
-                # Configurar retry con Hyx usando la API correcta
-                @retry(
-                    attempts=retry_attempts,
-                    backoff=expo(min_delay_secs=1.0, base=2.0, max_delay_secs=10.0),
-                    on=(ConnectionError, TimeoutError, OSError, Exception)
-                )
-                async def resilient_call():
+                # Parámetros de backoff
+                min_delay = 1.0
+                base = 2.0
+                max_delay = 10.0
+
+                last_exception: Optional[Exception] = None
+                for attempt in range(1, max(1, retry_attempts) + 1):
                     try:
                         # Implementar timeout manualmente
                         if asyncio.iscoroutinefunction(func):
@@ -146,28 +132,34 @@ class ResilienceService:
                                 ),
                                 timeout=timeout_seconds
                             )
-                        
+
                         # Registrar éxito en circuit breaker
                         ResilienceService._record_success()
                         return result
-                        
-                    except asyncio.TimeoutError:
-                        logger.error(f"Timeout después de {timeout_seconds} segundos")
-                        ResilienceService._record_failure()
-                        raise TimeoutError(f"Operación excedió {timeout_seconds} segundos")
-                    except Exception as e:
-                        logger.error(f"Error en llamada resiliente: {e}")
-                        ResilienceService._record_failure()
-                        raise
 
-                try:
-                    return await resilient_call()
-                except Exception as e:
-                    logger.error(f"Todos los patrones de resiliencia fallaron: {e}")
-                    if fallback_response is not None:
-                        logger.info(f"Usando respuesta de fallback: {fallback_response}")
-                        return fallback_response
-                    raise
+                    except asyncio.TimeoutError:
+                        last_exception = TimeoutError(f"Operación excedió {timeout_seconds} segundos")
+                        logger.error(f"[Intento {attempt}/{retry_attempts}] Timeout después de {timeout_seconds} segundos")
+                        ResilienceService._record_failure()
+                    except (ConnectionError, OSError) as e:
+                        last_exception = e
+                        logger.error(f"[Intento {attempt}/{retry_attempts}] Error de conexión/E/S: {e}")
+                        ResilienceService._record_failure()
+                    except Exception as e:
+                        last_exception = e
+                        logger.error(f"[Intento {attempt}/{retry_attempts}] Error en llamada resiliente: {e}")
+                        ResilienceService._record_failure()
+
+                    # Si quedan intentos, esperar con backoff
+                    if attempt < max(1, retry_attempts):
+                        delay = _compute_backoff_delay(attempt, min_delay=min_delay, base=base, max_delay=max_delay)
+                        await asyncio.sleep(delay)
+
+                logger.error(f"Todos los patrones de resiliencia fallaron: {last_exception}")
+                if fallback_response is not None:
+                    logger.info(f"Usando respuesta de fallback: {fallback_response}")
+                    return fallback_response
+                raise last_exception if last_exception else RuntimeError("Llamada resiliente fallida")
             
             return wrapper
         return decorator
@@ -180,20 +172,25 @@ class ResilienceService:
         def decorator(func: Callable) -> Callable:
             @wraps(func)
             async def wrapper(*args, **kwargs):
-                @retry(
-                    attempts=attempts,
-                    backoff=expo(min_delay_secs=delay, base=2.0, max_delay_secs=delay * 8),
-                    on=(ConnectionError, TimeoutError, OSError, Exception)
-                )
-                async def retry_call():
-                    if asyncio.iscoroutinefunction(func):
-                        return await func(*args, **kwargs)
-                    else:
-                        return await asyncio.get_event_loop().run_in_executor(
-                            None, func, *args, **kwargs
-                        )
-                
-                return await retry_call()
+                max_attempts = max(1, attempts)
+                base = 2.0
+                max_delay = delay * 8 if delay > 0 else 1.0
+                last_exception: Optional[Exception] = None
+
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        if asyncio.iscoroutinefunction(func):
+                            return await func(*args, **kwargs)
+                        else:
+                            loop = asyncio.get_event_loop()
+                            return await loop.run_in_executor(None, func, *args, **kwargs)
+                    except (ConnectionError, TimeoutError, OSError, Exception) as e:
+                        last_exception = e
+                        if attempt < max_attempts:
+                            sleep_for = _compute_backoff_delay(attempt, min_delay=max(0.0, delay), base=base, max_delay=max_delay)
+                            await asyncio.sleep(sleep_for)
+                        else:
+                            raise
             
             return wrapper
         return decorator
