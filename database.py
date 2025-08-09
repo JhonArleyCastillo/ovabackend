@@ -121,128 +121,89 @@ if IS_DEVELOPMENT and USE_SQLITE:
     # Crear un objeto connection_pool ficticio para compatibilidad
     connection_pool = True
 
-# MySQL para producción o desarrollo con MySQL
+# MySQL para producción o desarrollo con MySQL (sin pool: conexión por solicitud)
 else:
     # Verificar que las variables estén definidas
     if not all([DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME]):
         logger.error("Variables de conexión a BD incompletas o no definidas")
 
-    # Configuración del pool de conexiones MySQL (ajustada para RDS)
+    # Parámetros de conexión (ajustados para RDS)
+    connect_timeout_env = int(os.getenv('DB_CONNECT_TIMEOUT', '15'))
+    ssl_disabled_env = os.getenv('DB_SSL_DISABLED', '').lower() in ('1', 'true', 'yes')
+    ssl_ca_env = os.getenv('DB_SSL_CA')  # path to RDS CA bundle (optional)
+
     db_config = {
         'host': DB_HOST,
         'port': int(DB_PORT),
         'user': DB_USER,
         'password': DB_PASSWORD,
         'database': DB_NAME,
-        'connect_timeout': 15,  # Timeout un poco mayor para RDS
+        'connect_timeout': connect_timeout_env,
         'autocommit': False,
         'raise_on_warnings': True,
     }
 
-    # Tamaño del pool configurable (default bajo para multi-worker)
-    DEFAULT_POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '2'))
+    # SSL configuration (optional)
+    if ssl_disabled_env:
+        db_config['ssl_disabled'] = True
+    elif ssl_ca_env:
+        db_config['ssl_ca'] = ssl_ca_env
 
-    connection_pool = None
-
-    def _init_pool(retries: int = 3, delay: float = 1.0):
-        global connection_pool
+    def _connect_with_retry(max_retries: int = 3, delay: float = 1.0):
         last_err = None
-        for attempt in range(1, retries + 1):
+        for attempt in range(1, max_retries + 1):
             try:
-                pool_name = f"ova_pool_{os.getpid()}"
-                connection_pool = mysql.connector.pooling.MySQLConnectionPool(
-                    pool_name=pool_name,
-                    pool_size=DEFAULT_POOL_SIZE,
-                    **db_config
-                )
-                logger.info(f"Pool MySQL creado: name={pool_name}, size={DEFAULT_POOL_SIZE}")
-                return
+                conn = mysql.connector.connect(**db_config)
+                if attempt > 1:
+                    logger.info(f"Conexión MySQL establecida tras reintento {attempt-1}")
+                return conn
             except Exception as e:
                 last_err = e
-                logger.warning(f"Fallo creando pool MySQL (intento {attempt}/{retries}): {e}")
+                logger.warning(f"Fallo conectando a MySQL (intento {attempt}/{max_retries}): {e}")
                 time.sleep(delay)
-        logger.error(f"No se pudo crear el pool MySQL después de {retries} intentos: {last_err}")
-        connection_pool = None
-
-    def _ensure_pool():
-        if connection_pool is None:
-            _init_pool()
-        return connection_pool is not None
+        logger.error(f"No se pudo conectar a MySQL después de {max_retries} intentos: {last_err}")
+        raise last_err
 
     @contextmanager
     def db_session():
-        """
-        Proporciona un contexto para usar la conexión de la base de datos MySQL.
-        
-        Uso:
-        with db_session() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM items")
-            items = cursor.fetchall()
-        """
-        # Verificar si el pool está disponible antes de intentar conexiones
-        if not _ensure_pool():
-            raise RuntimeError("El pool de conexiones de base de datos no está disponible.")
-        
-        max_retries = 3
-        retry_count = 0
-        last_error = None
-        
-        while retry_count < max_retries:
-            try:
-                # Obtener una conexión del pool
-                conn = connection_pool.get_connection()
-                    
+        """Contexto transaccional con conexión directa a MySQL (sin pool)."""
+        conn = None
+        try:
+            conn = _connect_with_retry()
+            yield conn
+            conn.commit()
+        except Exception as e:
+            if conn:
                 try:
-                    yield conn
-                    conn.commit()
-                    return
-                except mysql.connector.Error as e:
                     conn.rollback()
-                    last_error = e
-                    raise
-                finally:
+                except Exception:
+                    pass
+            logger.error(f"Error en sesión de BD: {e}")
+            raise
+        finally:
+            if conn:
+                try:
                     conn.close()
-                    
-            except (mysql.connector.errors.PoolError, 
-                    mysql.connector.errors.InterfaceError,
-                    mysql.connector.errors.OperationalError) as e:
-                retry_count += 1
-                last_error = e
-                logger.warning(f"Error de conexión (intento {retry_count}/{max_retries}): {e}")
-                time.sleep(1)  # Esperar antes de reintentar
-        
-        # Si llegamos aquí, todos los reintentos fallaron
-        raise mysql.connector.errors.OperationalError(f"No se pudo establecer conexión después de {max_retries} intentos: {last_error}")
+                except Exception:
+                    pass
 
     def get_db():
-        """
-        Proporciona una conexión de base de datos MySQL y asegura que se cierre después de usarse.
-        
-        Para usar con FastAPI como dependencia:
-        @app.get("/items/")
-        def read_items(db: mysql.connector.connection.MySQLConnection = Depends(get_db)):
-            cursor = db.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM items")
-            items = cursor.fetchall()
-            cursor.close()
-            return items
-        """
-        if not _ensure_pool():
-            # Fallar rápidamente si el pool no está disponible
-            raise RuntimeError("El pool de conexiones de base de datos no está disponible.")
-        
-        # Obtener una conexión del pool
-        conn = connection_pool.get_connection()
-        
+        """Dependencia de FastAPI que retorna una conexión directa (sin pool)."""
+        conn = _connect_with_retry()
         try:
             yield conn
             conn.commit()
         except Exception:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             raise
         finally:
-            conn.close()
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def setup_database():
     """

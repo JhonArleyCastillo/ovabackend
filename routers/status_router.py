@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from routes import STATUS_ROUTE
 from services.huggingface_service import HuggingFaceService
 from common.router_utils import handle_errors
+from database import db_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -46,3 +47,29 @@ async def get_status():
             "memory_percent": psutil.virtual_memory().percent
         }
     }
+
+@router.get("/status/db")
+@router.get("/api/status/db")
+@handle_errors
+async def get_db_status():
+    """Verifica conectividad a la base de datos ejecutando una consulta simple."""
+    try:
+        with db_session() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            res = cur.fetchone()
+        return {
+            "db": "ok",
+            "result": res[0] if res else None,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"DB health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "db": "down",
+                "error": str(e),
+                "timestamp": datetime.datetime.now().isoformat()
+            }
+        )
