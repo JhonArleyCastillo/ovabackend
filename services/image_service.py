@@ -185,16 +185,20 @@ def recognize_sign_language(image: np.ndarray) -> dict:
 
                 # Procesar según el formato que retorna el modelo
                 if isinstance(prediction_result, dict):
+                    # Normalizar confianza a 0-100
+                    raw_conf = prediction_result.get("confidence", 0)
+                    conf = float(raw_conf)
+                    conf = conf * 100 if conf <= 1 else conf
                     return {
                         "resultado": prediction_result.get("label", "Desconocido"),
-                        "confianza": round(float(prediction_result.get("confidence", 0)) * 100, 2),
+                        "confianza": round(conf, 2),
                         "alternativas": []
                     }
                 else:
-                    # Si es string directo
+                    # Si es string directo, sin confianza confiable
                     return {
                         "resultado": str(prediction_result),
-                        "confianza": 95.0,  # Confianza por defecto
+                        "confianza": 0.0,
                         "alternativas": []
                     }
             else:

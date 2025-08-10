@@ -82,13 +82,28 @@ async def predict_asl(file: UploadFile = File(...)):
         # Procesar con el servicio optimizado de lenguaje de señas (gradio_client)
         result = await process_sign_language(image)
 
-        return {
-            "success": True,
-            "prediction": result.get("resultado", "Sin reconocimiento"),
-            "confidence": result.get("confianza", 0.0),
-            "alternatives": result.get("alternativas", []),
-            "message": "Imagen procesada exitosamente"
-        }
+        prediction = result.get("resultado")
+        confidence = float(result.get("confianza", 0.0) or 0.0)
+        has_error = bool(result.get("error"))
+        failed = has_error or prediction in ("Error en reconocimiento", "Sin reconocimiento", None) or confidence <= 0.0
+
+        if failed:
+            return {
+                "success": False,
+                "prediction": None,
+                "confidence": 0.0,
+                "alternatives": result.get("alternativas", []),
+                "message": "Servicio de reconocimiento no disponible o sin resultados",
+                "error": result.get("error")
+            }
+        else:
+            return {
+                "success": True,
+                "prediction": prediction,
+                "confidence": confidence,
+                "alternatives": result.get("alternativas", []),
+                "message": "Imagen procesada exitosamente"
+            }
     except HTTPException:
         raise
     except Exception as e:
@@ -114,14 +129,29 @@ async def predict_asl_space(file: UploadFile = File(...)):
         
         # Procesar con el servicio optimizado de lenguaje de señas
         result = await process_sign_language(image)
-        
-        return {
-            "success": True,
-            "prediction": result.get("resultado", "Sin reconocimiento"),
-            "confidence": result.get("confianza", 0.0),
-            "alternatives": result.get("alternativas", []),
-            "message": "Imagen procesada exitosamente"
-        }
+
+        prediction = result.get("resultado")
+        confidence = float(result.get("confianza", 0.0) or 0.0)
+        has_error = bool(result.get("error"))
+        failed = has_error or prediction in ("Error en reconocimiento", "Sin reconocimiento", None) or confidence <= 0.0
+
+        if failed:
+            return {
+                "success": False,
+                "prediction": None,
+                "confidence": 0.0,
+                "alternatives": result.get("alternativas", []),
+                "message": "Servicio de reconocimiento no disponible o sin resultados",
+                "error": result.get("error")
+            }
+        else:
+            return {
+                "success": True,
+                "prediction": prediction,
+                "confidence": confidence,
+                "alternatives": result.get("alternativas", []),
+                "message": "Imagen procesada exitosamente"
+            }
         
     except HTTPException:
         # Re-lanzar HTTPExceptions sin modificar
