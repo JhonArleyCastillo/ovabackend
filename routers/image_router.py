@@ -13,13 +13,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 try:
     from ..services.image_service import analyze_image, process_sign_language
     from ..common.service_utils import load_and_validate_image
-    from ..routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
     from ..utils import validate_image_magic_bytes
     from ..common.router_utils import handle_errors  # Centralized error handling
 except ImportError:
     from services.image_service import analyze_image, process_sign_language
     from common.service_utils import load_and_validate_image
-    from routes import PROCESS_IMAGE_ROUTE, ANALYZE_SIGN_LANGUAGE_ROUTE
     from utils import validate_image_magic_bytes
     from common.router_utils import handle_errors  # Centralized error handling
 # Local ASL model removed in favor of gradio_client-only flow to reduce deps
@@ -36,7 +34,10 @@ router = APIRouter(
     responses={404: {"description": "Recurso no encontrado"}}
 )
 
-@router.post(PROCESS_IMAGE_ROUTE)
+# Endpoints principales
+@router.post("/process-image")
+# Alias de compatibilidad: algunas versiones desplegadas tenían un '/api' extra en la ruta
+@router.post("/api/process-image")
 @handle_errors
 async def process_image(file: UploadFile = File(...)):
     """
@@ -51,7 +52,9 @@ async def process_image(file: UploadFile = File(...)):
         "description": result.get("description", "No se pudo generar una descripción")
     }
 
-@router.post(ANALYZE_SIGN_LANGUAGE_ROUTE)
+@router.post("/analyze-sign-language")
+# Alias de compatibilidad para versiones antiguas con '/api' extra
+@router.post("/api/analyze-sign-language")
 @handle_errors
 async def analyze_sign_language(file: UploadFile = File(...)):
     """
