@@ -181,13 +181,48 @@ def recognize_sign_language(image: np.ndarray) -> dict:
 
             # Procesar resultado de forma segura respecto a tipos
             prediction_result = None
+            alt_list: list[dict] = []
             if isinstance(result, (list, tuple)):
-                prediction_result = result[0] if len(result) > 0 else None
+                # Posibles formatos: [label, prob, top_preds], [(label, prob), ...], [ {label, confidence}, ...]
+                if len(result) >= 2 and isinstance(result[0], str):
+                    # Formato [label, prob, ...]
+                    label = result[0]
+                    prob_raw = result[1]
+                    try:
+                        prob = float(prob_raw)
+                        prob = prob * 100 if prob <= 1 else prob
+                    except Exception:
+                        prob = 0.0
+                    # Intentar alternativas si tercer elemento existe y es iterable de tuplas (clase, prob)
+                    if len(result) >= 3 and isinstance(result[2], (list, tuple)):
+                        for item in list(result[2])[:5]:
+                            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                                try:
+                                    p = float(item[1])
+                                    p = p * 100 if p <= 1 else p
+                                except Exception:
+                                    p = 0.0
+                                alt_list.append({"label": str(item[0]), "confidence": round(p, 2)})
+                    return {
+                        "resultado": label,
+                        "confianza": round(prob, 2),
+                        "alternativas": alt_list
+                    }
+                # Si la primera entrada es dict, úsala
+                if len(result) >= 1 and isinstance(result[0], dict):
+                    prediction_result = result[0]
+                else:
+                    # Si solo hay un string, tratamos con regex abajo
+                    if len(result) == 1 and isinstance(result[0], str):
+                        result = result[0]
+                    else:
+                        prediction_result = None
             elif isinstance(result, dict):
                 prediction_result = result
             elif isinstance(result, (str, int, float, bool)):
                 # Tipos escalares inesperados devueltos por el Space
-                logger.warning(f"Formato de respuesta inesperado del Space ASL: {type(result).__name__} -> {result}")
+                if not isinstance(result, str):
+                    logger.warning(f"Formato de respuesta inesperado del Space ASL: {type(result).__name__} -> {result}")
                 prediction_result = None
             else:
                 logger.warning(f"Tipo de respuesta no reconocido del Space ASL: {type(result).__name__}")
