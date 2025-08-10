@@ -109,6 +109,10 @@ async def chat_websocket(websocket: WebSocket):
                     logger.debug(f"⌨️ Cliente {connection_id} está escribiendo...")
                     pass
                 
+                elif message_type in ("ping", "heartbeat"):
+                    # Mensajes de latido del cliente: ignorar silenciosamente
+                    logger.debug(f"💓 Ping/heartbeat recibido de {connection_id}")
+                    continue
                 else:
                     logger.warning(f"⚠️ Tipo de mensaje no soportado de {connection_id}: {message_type}")
                     error_msg = ErrorMessage(
