@@ -34,10 +34,7 @@ router = APIRouter(
     responses={404: {"description": "Recurso no encontrado"}}
 )
 
-# Endpoints principales
 @router.post("/process-image")
-# Alias de compatibilidad: algunas versiones desplegadas tenían un '/api' extra en la ruta
-@router.post("/api/process-image")
 @handle_errors
 async def process_image(file: UploadFile = File(...)):
     """
@@ -53,8 +50,6 @@ async def process_image(file: UploadFile = File(...)):
     }
 
 @router.post("/analyze-sign-language")
-# Alias de compatibilidad para versiones antiguas con '/api' extra
-@router.post("/api/analyze-sign-language")
 @handle_errors
 async def analyze_sign_language(file: UploadFile = File(...)):
     """
