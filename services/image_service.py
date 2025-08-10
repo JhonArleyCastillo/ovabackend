@@ -178,31 +178,41 @@ def recognize_sign_language(image: np.ndarray) -> dict:
             logger.info("📸 Enviando imagen para reconocimiento ASL...")
             result = client.predict(image=handle_file(temp_path), api_name="/predict")
 
-            # Procesar resultado
-            if result and len(result) > 0:
-                # El resultado viene como una lista, tomar el primer elemento
-                prediction_result = result[0] if isinstance(result, list) else result
-
-                # Procesar según el formato que retorna el modelo
-                if isinstance(prediction_result, dict):
-                    # Normalizar confianza a 0-100
-                    raw_conf = prediction_result.get("confidence", 0)
-                    conf = float(raw_conf)
-                    conf = conf * 100 if conf <= 1 else conf
-                    return {
-                        "resultado": prediction_result.get("label", "Desconocido"),
-                        "confianza": round(conf, 2),
-                        "alternativas": []
-                    }
-                else:
-                    # Si es string directo, sin confianza confiable
-                    return {
-                        "resultado": str(prediction_result),
-                        "confianza": 0.0,
-                        "alternativas": []
-                    }
+            # Procesar resultado de forma segura respecto a tipos
+            prediction_result = None
+            if isinstance(result, (list, tuple)):
+                prediction_result = result[0] if len(result) > 0 else None
+            elif isinstance(result, dict):
+                prediction_result = result
+            elif isinstance(result, (str, int, float, bool)):
+                # Tipos escalares inesperados devueltos por el Space
+                logger.warning(f"Formato de respuesta inesperado del Space ASL: {type(result).__name__} -> {result}")
+                prediction_result = None
             else:
-                logger.warning("Resultado vacío del modelo ASL")
+                logger.warning(f"Tipo de respuesta no reconocido del Space ASL: {type(result).__name__}")
+
+            if isinstance(prediction_result, dict):
+                # Normalizar confianza a 0-100
+                raw_conf = prediction_result.get("confidence", 0)
+                try:
+                    conf = float(raw_conf)
+                except Exception:
+                    conf = 0.0
+                conf = conf * 100 if conf <= 1 else conf
+                return {
+                    "resultado": prediction_result.get("label", "Desconocido"),
+                    "confianza": round(conf, 2),
+                    "alternativas": []
+                }
+            elif isinstance(result, str):
+                # String directo: tratar como sin confianza
+                return {
+                    "resultado": result,
+                    "confianza": 0.0,
+                    "alternativas": []
+                }
+            else:
+                logger.warning("Resultado vacío o inválido del modelo ASL")
                 return {
                     "resultado": "Sin reconocimiento",
                     "confianza": 0.0,
