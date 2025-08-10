@@ -160,6 +160,7 @@ def recognize_sign_language(image: np.ndarray) -> dict:
     try:
         from gradio_client import Client, handle_file
         import tempfile
+        import re
 
         # Convertir numpy array a PIL Image
         pil_image = Image.fromarray(image).convert("RGB")
@@ -205,9 +206,29 @@ def recognize_sign_language(image: np.ndarray) -> dict:
                     "alternativas": []
                 }
             elif isinstance(result, str):
-                # String directo: tratar como sin confianza
+                # String directo: intentar extraer etiqueta y confianza.
+                # Ejemplos esperados:
+                # - "Predicción: A (65.40%)"
+                # - "Prediccion: B (87%)"
+                # - "A (65.40%)"
+                text = result.strip()
+                # Regex tolerante a acentos y formato de porcentaje con coma o punto
+                m = re.search(r"(?i)(?:predicci[oó]n:\s*)?([A-Za-z0-9]+)\s*\((\d+(?:[\.,]\d+)?)%\)", text)
+                if m:
+                    label = m.group(1)
+                    conf_str = m.group(2).replace(',', '.')
+                    try:
+                        conf = float(conf_str)
+                    except Exception:
+                        conf = 0.0
+                    return {
+                        "resultado": label,
+                        "confianza": round(conf, 2),
+                        "alternativas": []
+                    }
+                # Si no coincide el patrón, devolver como texto sin confianza
                 return {
-                    "resultado": result,
+                    "resultado": text,
                     "confianza": 0.0,
                     "alternativas": []
                 }
