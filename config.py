@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 # ===== Entorno =====
 ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
 IS_DEVELOPMENT: bool = ENVIRONMENT.lower() == "development"
+ASL_DEBUG: bool = os.getenv("ASL_DEBUG", "false").lower() == "true" or IS_DEVELOPMENT
 
 # ===== Base de Datos =====
 # Para desarrollo simple, se puede usar SQLite con USE_SQLITE=true

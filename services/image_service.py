@@ -7,6 +7,8 @@ Hugging Face models with built-in resilience patterns.
 """
 
 import logging
+import json
+import time
 from typing import Dict, List, Any, Optional, Union
 import numpy as np
 import asyncio
@@ -134,7 +136,7 @@ async def analyze_image(image: Image.Image) -> dict:
     
     return result
 
-async def process_sign_language(image: Image.Image) -> dict:
+async def process_sign_language(image: Image.Image, correlation_id: str | None = None) -> dict:
     """
     Procesa una imagen de lenguaje de señas y devuelve la interpretación.
     
@@ -146,13 +148,9 @@ async def process_sign_language(image: Image.Image) -> dict:
     """
     # Convertir imagen PIL a numpy array para procesamiento
     np_image = np.array(image)
-    
-    # Reconocer el lenguaje de señas en la imagen
-    result = recognize_sign_language(np_image)
-    
-    return result
+    return recognize_sign_language(np_image, correlation_id=correlation_id)
 
-def recognize_sign_language(image: np.ndarray) -> dict:
+def recognize_sign_language(image: np.ndarray, correlation_id: str | None = None) -> dict:
     """
     Reconoce lenguaje de señas en una imagen usando la API de Gradio.
     Optimizado para EC2 - no requiere cargar modelos localmente.
@@ -172,19 +170,44 @@ def recognize_sign_language(image: np.ndarray) -> dict:
 
         try:
             # Conectar al Space ASL en Hugging Face (URL completa desde config)
-            logger.info("🔍 Conectando al Space ASL en Hugging Face...")
+            prefix = f"[ASL_CORE][{correlation_id}]" if correlation_id else "[ASL_CORE]"
+            logger.info(f"{prefix} 🔍 Conectando al Space ASL en Hugging Face... url={HF_ASL_SPACE_URL}")
             client = Client(HF_ASL_SPACE_URL)
 
             # Realizar predicción
-            logger.info("📸 Enviando imagen para reconocimiento ASL...")
+            logger.info(f"{prefix} 📸 Enviando imagen para reconocimiento ASL... temp_file={os.path.basename(temp_path)}")
+            t_call = time.time()
             result = client.predict(image=handle_file(temp_path), api_name="/predict")
+            call_ms = (time.time() - t_call) * 1000
+            # Log de tipo y tamaño textual
+            try:
+                preview = str(result)
+                if len(preview) > 300:
+                    preview = preview[:300] + '…'
+            except Exception:
+                preview = '<unrepresentable>'
+            logger.info(f"{prefix} ⏱️ Space respuesta recibida en {call_ms:.1f}ms tipo={type(result).__name__} preview={preview}")
+            # Log JSON crudo completo (o truncado) para diagnóstico
+            try:
+                if isinstance(result, (dict, list, tuple)):
+                    raw_json = json.dumps(result, ensure_ascii=False, default=str)
+                else:
+                    raw_json = json.dumps({"raw": result}, ensure_ascii=False, default=str)
+                if len(raw_json) > 8000:  # evitar logs excesivos
+                    logger.debug(f"{prefix} RAW_JSON (truncated) {raw_json[:8000]}… (len={len(raw_json)})")
+                else:
+                    logger.debug(f"{prefix} RAW_JSON {raw_json}")
+            except Exception as jex:
+                logger.debug(f"{prefix} RAW_JSON_SERIALIZE_ERROR type={type(result).__name__} err={jex}")
 
             # Procesar resultado de forma segura respecto a tipos
             prediction_result = None
             alt_list: list[dict] = []
+            parse_path = 'unknown'
             if isinstance(result, (list, tuple)):
                 # Posibles formatos: [label, prob, top_preds], [(label, prob), ...], [ {label, confidence}, ...]
                 if len(result) >= 2 and isinstance(result[0], str):
+                    parse_path = 'list[label,prob,(alts?)]'
                     # Formato [label, prob, ...]
                     label = result[0]
                     prob_raw = result[1]
@@ -210,6 +233,7 @@ def recognize_sign_language(image: np.ndarray) -> dict:
                     }
                 # Si la primera entrada es dict, úsala
                 if len(result) >= 1 and isinstance(result[0], dict):
+                    parse_path = 'list[dict]'
                     prediction_result = result[0]
                 else:
                     # Si solo hay un string, tratamos con regex abajo
@@ -218,16 +242,19 @@ def recognize_sign_language(image: np.ndarray) -> dict:
                     else:
                         prediction_result = None
             elif isinstance(result, dict):
+                parse_path = 'dict'
                 prediction_result = result
             elif isinstance(result, (str, int, float, bool)):
+                parse_path = 'scalar'
                 # Tipos escalares inesperados devueltos por el Space
                 if not isinstance(result, str):
                     logger.warning(f"Formato de respuesta inesperado del Space ASL: {type(result).__name__} -> {result}")
                 prediction_result = None
             else:
-                logger.warning(f"Tipo de respuesta no reconocido del Space ASL: {type(result).__name__}")
+                logger.warning(f"{prefix} Tipo de respuesta no reconocido del Space ASL: {type(result).__name__}")
 
             if isinstance(prediction_result, dict):
+                logger.debug(f"{prefix} parse_path={parse_path} usando prediction_result dict keys={list(prediction_result.keys())}")
                 # Normalizar confianza a 0-100
                 raw_conf = prediction_result.get("confidence", 0)
                 try:
@@ -241,6 +268,7 @@ def recognize_sign_language(image: np.ndarray) -> dict:
                     "alternativas": []
                 }
             elif isinstance(result, str):
+                logger.debug(f"{prefix} parse_path={parse_path} intentando regex sobre string len={len(result)}")
                 # String directo: intentar extraer etiqueta y confianza.
                 # Ejemplos esperados:
                 # - "Predicción: A (65.40%)"
@@ -256,19 +284,23 @@ def recognize_sign_language(image: np.ndarray) -> dict:
                         conf = float(conf_str)
                     except Exception:
                         conf = 0.0
-                    return {
+                    final = {
                         "resultado": label,
                         "confianza": round(conf, 2),
                         "alternativas": []
                     }
+                    logger.debug(f"{prefix} parse_path=regex label={label} conf={conf}")
+                    return final
                 # Si no coincide el patrón, devolver como texto sin confianza
-                return {
+                final = {
                     "resultado": text,
                     "confianza": 0.0,
                     "alternativas": []
                 }
+                logger.debug(f"{prefix} parse_path=raw_string texto_sin_patron len={len(text)}")
+                return final
             else:
-                logger.warning("Resultado vacío o inválido del modelo ASL")
+                logger.warning(f"{prefix} Resultado vacío o inválido del modelo ASL parse_path={parse_path}")
                 return {
                     "resultado": "Sin reconocimiento",
                     "confianza": 0.0,
@@ -281,7 +313,7 @@ def recognize_sign_language(image: np.ndarray) -> dict:
                 os.unlink(temp_path)
 
     except Exception as e:
-        logger.error(f"Error al reconocer lenguaje de señas con API Gradio: {e}")
+        logger.error(f"{prefix} Error al reconocer lenguaje de señas con API Gradio: {e}")
         # Fallback a respuesta por defecto
         return {
             "resultado": "Error en reconocimiento",
