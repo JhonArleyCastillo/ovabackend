@@ -4,17 +4,17 @@ import logging
 import sys
 import os
 
-# Añadir el directorio raíz del proyecto al path de Python
+# Necesitamos agregar nuestro directorio al path para que Python encuentre nuestros módulos
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Importaciones de la aplicación
+# Importando toda la configuración y routers que hemos creado
 from ovabackend.config import ALLOWED_ORIGINS, CORS_MAX_AGE, IS_DEVELOPMENT
 from ovabackend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router, resilience_router
 from ovabackend.logging_config import configure_logging
 from ovabackend.database import setup_database
 import ovabackend.db_models
 
-# Configurar logging
+# Configuramos el logging antes que nada para tener visibilidad de todo
 logger = logging.getLogger(__name__)
 configure_logging()
 
@@ -24,26 +24,26 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# ❌ REMOVIDO: Registro duplicado de image_router
+# Ya no necesitamos este registro duplicado, lo removimos arriba
 # app.include_router(image_router.router)
 
-# Configurar CORS con diferentes configuraciones según el entorno
+# Configurar CORS es crítico para que el frontend pueda hablar con nosotros
 logger.info(f"Configurando CORS con orígenes permitidos: {ALLOWED_ORIGINS}")
 logger.info(f"Entorno de ejecución: {'Desarrollo' if IS_DEVELOPMENT else 'Producción'}")
 
-# Headers específicos que realmente necesita la aplicación
+# Solo permitimos los headers que realmente usamos, por seguridad
 allowed_headers = ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"]
 exposed_headers = ["Content-Length", "Content-Type"]
 
-# Métodos HTTP que realmente utiliza la aplicación
+# En producción somos estrictos con los métodos HTTP
 allowed_methods = ["GET", "POST", "OPTIONS"]
 if IS_DEVELOPMENT:
-    # En desarrollo podemos permitir más métodos para facilitar pruebas
+    # En desarrollo dejamos más libertad para poder hacer pruebas fácilmente
     allowed_methods.extend(["PUT", "DELETE", "PATCH"])
-    # En desarrollo podemos ser un poco más permisivos con los headers
+    # También somos más permisivos con headers en desarrollo
     allowed_headers.append("*")
 
-# Registrar información detallada sobre configuración CORS
+# Es importante verificar que no tengamos orígenes inseguros en producción
 logger.info(f"Configurando CORS con {len(ALLOWED_ORIGINS)} orígenes permitidos")
 for origin in ALLOWED_ORIGINS:
     if not IS_DEVELOPMENT and not (origin.startswith("https://") or "localhost" in origin):
@@ -59,43 +59,44 @@ app.add_middleware(
     max_age=CORS_MAX_AGE,
 )
 
-# Incluir routers
-# WebSocket router no lleva prefijo adicional
+# Registramos todos nuestros routers - cada uno maneja una parte específica de la API
+# WebSocket para el chat en tiempo real
 app.include_router(websocket_router.router, tags=["WebSockets y Audio"])
-# Los routers REST no necesitan prefijo adicional ya que se incluye en las rutas
+# Status para verificar que todo funciona
 app.include_router(status_router.router, tags=["Estado"])
+# El corazón de la app: análisis de imágenes ASL
 app.include_router(image_router.router, tags=["Análisis de Imágenes"])
-# Routers para la base de datos y autenticación
+# Autenticación y usuarios
 app.include_router(auth_router.router)
 app.include_router(usuarios_router.router)
-# Nuevo router para el formulario de contacto
+# Formulario de contacto
 app.include_router(contact_router.router)
-# Router para monitoreo de resiliencia
+# Monitoreo para saber cómo va todo
 app.include_router(resilience_router.resilience_router, tags=["Resiliencia"])
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Iniciando servidor...")
+    logger.info("🚀 Iniciando servidor...")
     
-    # Verificar configuraciones críticas
+    # Verificamos que la configuración básica esté bien antes de continuar
     if not ALLOWED_ORIGINS:
-        logger.error("ALLOWED_ORIGINS no está configurado correctamente")
+        logger.error("❌ ALLOWED_ORIGINS no está configurado - esto romperá CORS")
         sys.exit(1)
     
-    # Registrar información sobre la configuración de seguridad
-    logger.info(f"Métodos HTTP permitidos: {allowed_methods}")
-    logger.info(f"Headers permitidos: {allowed_headers}")
-    logger.info(f"Headers expuestos: {exposed_headers}")
+    # Logging de configuración para debugging
+    logger.info(f"✅ Métodos HTTP permitidos: {allowed_methods}")
+    logger.info(f"✅ Headers permitidos: {allowed_headers}")
+    logger.info(f"✅ Headers expuestos: {exposed_headers}")
     
-    # Inicializar la base de datos
-    logger.info("Inicializando base de datos...")
+    # Intentamos conectar la base de datos
+    logger.info("🔌 Inicializando base de datos...")
     try:
         setup_database()
-        logger.info("Base de datos inicializada correctamente")
+        logger.info("✅ Base de datos inicializada correctamente")
     except Exception as e:
-        logger.error(f"Error al inicializar la base de datos: {e}")
-        # No detener el servidor: permitir que WS/HTTP sigan funcionando
-        logger.warning("Continuando ejecución sin inicialización completa de BD. Verificar RDS/credenciales.")
+        logger.error(f"❌ Error al inicializar la base de datos: {e}")
+        # No paramos el servidor - el WebSocket y análisis de imágenes pueden funcionar sin BD
+        logger.warning("⚠️ Continuando sin BD completa. WebSocket y ASL seguirán funcionando.")
     
-    logger.info("Servidor iniciado correctamente")
+    logger.info("🎉 Servidor listo para recibir peticiones")
 

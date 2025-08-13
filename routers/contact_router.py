@@ -1,9 +1,12 @@
 """
-Contact form message management router.
+Router para manejo de mensajes del formulario de contacto.
 
-This router handles operations related to contact form messages including
-public message submission from the frontend and administrative message
-management for authenticated administrators.
+Este router maneja todo lo relacionado con mensajes de contacto:
+- Recepción de mensajes desde el frontend (endpoint público)
+- Gestión administrativa de mensajes (endpoints protegidos)
+
+Como desarrollador fullstack, aquí están los endpoints que usa el formulario
+de contacto del frontend y el panel admin para revisar los mensajes.
 """
 
 from typing import List, Optional, Dict, Any
@@ -13,10 +16,10 @@ import mysql.connector
 import sys
 import os
 
-# Add the parent directory to sys.path to allow imports
+# Agregamos el directorio padre para imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import modules
+# Importamos módulos necesarios
 try:
     from ..common.database_utils import DatabaseManager, DbDependency
     from ..auth import get_current_admin
@@ -31,14 +34,14 @@ except ImportError:
     from common.router_utils import handle_errors
 from pydantic import BaseModel, EmailStr
 
-# Configure module logger
+# Logger para este módulo
 logger = logging.getLogger(__name__)
 
-# Configure contact router with proper prefix and metadata
+# Configuramos el router con metadata apropiada
 router = APIRouter(
     prefix="/api/contactos",
     tags=["contacto"],
-    responses={404: {"description": "Contact message not found"}},
+    responses={404: {"description": "Mensaje de contacto no encontrado"}},
 )
 
 @router.post("/", response_model=ContactoResponse, 
@@ -49,25 +52,25 @@ async def enviar_mensaje(
     db: mysql.connector.connection.MySQLConnection = DbDependency
 ) -> ContactoResponse:
     """
-    Submit a message from the public contact form.
+    Recibe un mensaje desde el formulario de contacto público.
     
-    This endpoint is public and does not require authentication.
-    It creates a new contact message in the database for later
-    review by administrators.
+    Este endpoint NO requiere autenticación - cualquiera puede enviar mensajes.
+    Los mensajes se guardan en BD para que los administradores los revisen después.
+    
+    Es el endpoint que usa el frontend cuando alguien llena el formulario de contacto.
     
     Args:
-        contacto (ContactoCreate): Contact form data including name,
-                                  email, subject, and message.
-        db (mysql.connector.connection.MySQLConnection): Database connection.
+        contacto: Datos del formulario (nombre, email, asunto, mensaje)
+        db: Conexión a la BD (se inyecta automáticamente)
     
     Returns:
-        ContactoResponse: Created contact message data.
+        ContactoResponse: Datos del mensaje creado (con ID y fecha)
         
     Raises:
-        HTTPException: If message creation fails.
+        HTTPException: Si falla la creación del mensaje
     """
     try:
-        # Use ContactoModel to create and retrieve the record
+        # Usamos el modelo para crear el registro en BD
         contacto_id = ContactoModel.crear(
             contacto.nombre_completo,
             contacto.email,
@@ -75,22 +78,22 @@ async def enviar_mensaje(
             contacto.mensaje
         )
         
-        # Retrieve the created contact record
+        # Recuperamos el contacto recién creado para devolverlo
         nuevo_contacto = ContactoModel.obtener_por_id(contacto_id)
         
         if not nuevo_contacto:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                detail="Error creating contact message"
+                detail="Error creando mensaje de contacto"
             )
             
         return nuevo_contacto
         
     except Exception as e:
-        logger.error(f"Error creating contact message: {str(e)}")
+        logger.error(f"Error creando mensaje de contacto: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to submit contact message"
+            detail="Falló el envío del mensaje de contacto"
         )
 
 @router.get("/", response_model=List[ContactoResponse])

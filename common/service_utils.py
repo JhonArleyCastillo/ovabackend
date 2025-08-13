@@ -1,5 +1,11 @@
 """
-Utilidades de servicio consolidadas para eliminar redundancia en patrones de servicio.
+Utilidades de servicio para eliminar código repetitivo.
+
+Este módulo contiene clases base y mixins que usan múltiples servicios
+para evitar repetir los mismos patrones una y otra vez.
+
+Como desarrollador fullstack, si necesitas funcionalidad similar en varios
+servicios (timeouts, reintentos, logging), probablemente esté aquí.
 """
 import asyncio
 import logging
@@ -9,7 +15,7 @@ import time
 import sys
 import os
 
-# Add the parent directory to sys.path to allow imports
+# Agregamos el directorio padre para imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from services.resilience_service import ResilienceService
@@ -22,27 +28,52 @@ logger = logging.getLogger(__name__)
 
 
 class ServiceBase:
-    """Clase base para todos los servicios con patrones comunes."""
+    """
+    Clase base para todos los servicios con patrones comunes.
+    
+    Si creas un nuevo servicio, heredar de esta clase te da
+    logging consistente y métodos útiles sin escribir código extra.
+    """
     
     def __init__(self, service_name: str):
         self.service_name = service_name
         self.logger = logging.getLogger(f"{__name__}.{service_name}")
     
     def log_operation(self, operation: str, details: str = ""):
-        """Registrar operaciones de servicio de manera consistente."""
+        """
+        Loggea operaciones de manera consistente.
+        
+        Uso: self.log_operation("imagen_procesada", "resultado=A conf=85%")
+        """
         self.logger.info(f"{self.service_name} - {operation}: {details}")
     
     def log_error(self, operation: str, error: Exception):
-        """Registrar errores de servicio de manera consistente."""
-        self.logger.error(f"{self.service_name} - Error in {operation}: {error}")
+        """
+        Loggea errores de manera consistente.
+        
+        Uso: self.log_error("conexion_gradio", exception)
+        """
+        self.logger.error(f"{self.service_name} - Error en {operation}: {error}")
 
 
 class AsyncServiceMixin:
-    """Mixin para patrones comunes de servicios asincrónicos."""
+    """
+    Mixin con patrones útiles para servicios asincrónicos.
+    
+    Proporciona decoradores para timeouts y reintentos que puedes
+    usar en cualquier función async.
+    """
     
     @staticmethod
     def with_timeout(timeout_seconds: float = 30.0):
-        """Decorador para agregar límite de tiempo a operaciones asyncio."""
+        """
+        Decorador que agrega timeout a funciones async.
+        
+        Uso:
+        @AsyncServiceMixin.with_timeout(60.0)
+        async def mi_funcion_lenta():
+            # Si tarda más de 60s, lanza excepción
+        """
         def decorator(func):
             @wraps(func)
             async def wrapper(*args, **kwargs):
@@ -59,7 +90,14 @@ class AsyncServiceMixin:
     
     @staticmethod
     def with_retry(max_attempts: int = 3, delay: float = 1.0):
-        """Decorador para agregar lógica de reintentos a operaciones asincrónicas."""
+        """
+        Decorador que agrega reintentos automáticos a funciones async.
+        
+        Uso:
+        @AsyncServiceMixin.with_retry(max_attempts=5, delay=2.0)
+        async def mi_funcion_que_puede_fallar():
+            # Si falla, reintenta hasta 5 veces con delay exponencial
+        """
         def decorator(func):
             @wraps(func)
             async def wrapper(*args, **kwargs):
@@ -72,7 +110,7 @@ class AsyncServiceMixin:
                         last_exception = e
                         if attempt < max_attempts - 1:
                             logger.warning(f"Intento {attempt + 1} fallido en {func.__name__}: {e}")
-                            await asyncio.sleep(delay * (2 ** attempt))  # Exponential backoff
+                            await asyncio.sleep(delay * (2 ** attempt))  # Backoff exponencial
                         else:
                             logger.error(f"Todos los intentos fallaron en {func.__name__}: {e}")
                 
@@ -82,7 +120,12 @@ class AsyncServiceMixin:
 
 
 class HuggingFaceServiceMixin:
-    """Patrones comunes para servicios de Hugging Face."""
+    """
+    Patrones específicos para servicios que usan Hugging Face.
+    
+    Proporciona decoradores y utilidades optimizados para trabajar
+    con APIs de Hugging Face que pueden ser lentas o inestables.
+    """
     
     @staticmethod
     def with_resilience(
@@ -90,7 +133,14 @@ class HuggingFaceServiceMixin:
         retry_attempts: int = 3,
         fallback_response: Any = None
     ):
-        """Aplicar patrones de resiliencia usando ResilienceService."""
+        """
+        Aplica todos los patrones de resiliencia para APIs de Hugging Face.
+        
+        Uso:
+        @HuggingFaceServiceMixin.with_resilience(timeout_seconds=90, fallback_response={})
+        async def llamar_modelo_hf():
+            # Se maneja timeout, reintentos y fallback automáticamente
+        """
         return ResilienceService.resilient_hf_call(
             timeout_seconds=timeout_seconds,
             retry_attempts=retry_attempts,

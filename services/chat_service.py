@@ -21,7 +21,7 @@ GRADIO_ENDPOINTS = [
     },
     {
         "name": "Hugging Face Chat UI",
-        "endpoint": "huggingface-projects/llama-2-7b-chat",
+        "endpoint": "amd/gpt-oss-120b-chatbot",
         "api_name": "/chat",
         "supports_system_prompt": True
     }

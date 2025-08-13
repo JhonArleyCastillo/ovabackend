@@ -1,18 +1,23 @@
 """
-Funciones de autenticación y seguridad para la aplicación.
+Sistema de autenticación y seguridad para administradores.
 
-Este módulo proporciona funcionalidad para la autenticación de administradores,
-gestión de tokens JWT y verificación de contraseñas.
+Este módulo maneja todo lo relacionado con login de administradores:
+- Autenticación con email y password
+- Generación y validación de tokens JWT
+- Middleware de seguridad para endpoints protegidos
+
+Como desarrollador fullstack, este es el corazón de la seguridad del admin panel.
+Si hay problemas de login o tokens expirados, aquí es donde buscar.
 """
 
 from datetime import datetime, timedelta
 from typing import Optional, Union, Dict, Any
-from jose import jwt, JWTError  # JWT library for token management
+from jose import jwt, JWTError  # Librería JWT para manejo de tokens
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 import mysql.connector
 
-# Import relative configuration and utilities
+# Importamos configuración
 from config import (
     JWT_SECRET_KEY, 
     JWT_ALGORITHM, 
@@ -27,7 +32,7 @@ from db_models import SesionAdminModel
 import schemas
 from security_utils import get_password_hash, verify_password
 
-# OAuth2 scheme configuration with absolute URL path
+# Configuración OAuth2 - esto le dice a FastAPI dónde está el endpoint de login
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
 def authenticate_admin(
@@ -36,19 +41,21 @@ def authenticate_admin(
     password: str
 ) -> Optional[Dict[str, Any]]:
     """
-    Authenticate an administrator by email and password.
+    Autentica un administrador por email y contraseña.
+    
+    Esta función es la que realmente verifica si el login es correcto.
+    Busca el admin por email y verifica que la contraseña coincida.
     
     Args:
-        db (mysql.connector.connection.MySQLConnection): Database connection.
-        email (str): Administrator's email address.
-        password (str): Plain text password to verify.
+        db: Conexión a la base de datos
+        email: Email del administrador
+        password: Contraseña en texto plano (se verifica contra el hash)
     
     Returns:
-        Optional[Dict[str, Any]]: Administrator data if authentication 
-                                  successful, None otherwise.
+        Dict con datos del admin si el login es correcto, None si falla
     
     Raises:
-        mysql.connector.Error: If database query fails.
+        mysql.connector.Error: Si hay problemas con la BD
     """
     cursor = db.cursor(dictionary=True)
     try:
@@ -59,15 +66,15 @@ def authenticate_admin(
         admin = cursor.fetchone()
         
         if not admin:
-            return None
+            return None  # Email no existe
         
         if not verify_password(password, admin["hashed_password"]):
-            return None
+            return None  # Contraseña incorrecta
             
-        return admin
+        return admin  # ¡Login exitoso!
     except mysql.connector.Error as e:
-        # Log error in production environment
-        print(f"Database error during authentication: {e}")
+        # En producción deberías loggear esto apropiadamente
+        print(f"Error de BD durante autenticación: {e}")
         return None
     finally:
         cursor.close()
@@ -77,22 +84,24 @@ def create_access_token(
     expires_delta: Optional[timedelta] = None
 ) -> str:
     """
-    Create a JWT access token with the provided data.
+    Crea un token JWT con los datos proporcionados.
+    
+    Este token es lo que el frontend guarda después del login y envía
+    en cada petición para probar que el usuario está autenticado.
     
     Args:
-        data (Dict[str, Any]): Token payload data to encode.
-        expires_delta (Optional[timedelta]): Custom expiration time. 
-                                           Uses default if None.
+        data: Datos a incluir en el token (normalmente user_id, email, etc.)
+        expires_delta: Tiempo personalizado de expiración (usa default si es None)
     
     Returns:
-        str: Encoded JWT token.
+        str: Token JWT codificado listo para enviar al frontend
     
     Raises:
-        ValueError: If token encoding fails.
+        ValueError: Si la codificación del token falla
     """
     to_encode = data.copy()
     
-    # Calculate expiration time
+    # Calculamos cuándo expira el token
     expire = datetime.utcnow() + (
         expires_delta if expires_delta 
         else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -108,7 +117,7 @@ def create_access_token(
         )
         return encoded_jwt
     except Exception as e:
-        raise ValueError(f"Failed to encode JWT token: {e}")
+        raise ValueError(f"Error codificando token JWT: {e}")
 
 def register_admin_session(
     db: mysql.connector.connection.MySQLConnection, 
@@ -118,29 +127,31 @@ def register_admin_session(
     navegador: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Register a new administrator session in the database.
+    Registra una nueva sesión de administrador en la BD.
+    
+    Esto es útil para tracking de sesiones - puedes ver quién está
+    logueado, desde dónde, y cuándo expiran los tokens. También permite
+    invalidar sesiones específicas si es necesario.
     
     Args:
-        db (mysql.connector.connection.MySQLConnection): Database connection
-                                                         (maintained for 
-                                                         compatibility).
-        admin_id (int): Administrator's unique identifier.
-        token (str): Session token.
-        ip_address (Optional[str]): Client's IP address.
-        navegador (Optional[str]): Browser information.
+        db: Conexión a la base de datos
+        admin_id: ID del administrador
+        token: Token JWT que se generó
+        ip_address: IP desde donde se conectó (opcional)
+        navegador: Info del browser (opcional)
         
     Returns:
-        Dict[str, Any]: Created session data.
+        Dict con los datos de la sesión creada
         
     Raises:
-        DatabaseError: If session creation fails.
+        DatabaseError: Si no se puede crear la sesión
     """
-    # Calculate expiration time based on token lifetime
+    # Calculamos cuándo expira basándome en la configuración del token
     expires = datetime.utcnow() + timedelta(
         minutes=ACCESS_TOKEN_EXPIRE_MINUTES
     )
     
-    # Use SesionAdminModel to create session in database
+    # Usamos el modelo para crear la sesión en BD
     session_id = SesionAdminModel.crear(
         admin_id=admin_id,
         token=token,
@@ -150,7 +161,7 @@ def register_admin_session(
         activa=True
     )
     
-    # Retrieve and return the created session
+    # Devolvemos la sesión recién creada
     session = SesionAdminModel.obtener_por_id(session_id)
     return session
 
@@ -159,17 +170,23 @@ async def get_current_admin(
     db: mysql.connector.connection.MySQLConnection = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get current administrator from JWT token.
+    Obtiene el administrador actual desde el token JWT.
+    
+    Esta función es la que FastAPI usa automáticamente cuando pones
+    'current_admin: Depends(get_current_admin)' en un endpoint.
+    
+    Decodifica el token, verifica que sea válido, y devuelve los datos
+    del admin. Si algo falla, lanza una excepción 401 Unauthorized.
     
     Args:
-        token (str): JWT token from request header.
-        db (mysql.connector.connection.MySQLConnection): Database connection.
+        token: Token JWT del header Authorization
+        db: Conexión a la BD (se inyecta automáticamente)
     
     Returns:
-        Dict[str, Any]: Current administrator data.
+        Dict con los datos del administrador actual
         
     Raises:
-        HTTPException: If token is invalid, expired, or admin not found.
+        HTTPException: Si el token es inválido, expirado, o el admin no existe
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -178,7 +195,7 @@ async def get_current_admin(
     )
     
     try:
-        # Decode JWT token to extract payload
+        # Decodificamos el token JWT para extraer la información
         payload = jwt.decode(
             token, 
             JWT_SECRET_KEY, 
@@ -187,7 +204,7 @@ async def get_current_admin(
         email: str = payload.get("sub")
         admin_id: int = payload.get("admin_id")
         
-        # Validate required token data
+        # Validamos que el token tenga los datos requeridos
         if email is None or admin_id is None:
             raise credentials_exception
             

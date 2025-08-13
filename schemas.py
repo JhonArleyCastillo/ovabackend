@@ -1,9 +1,15 @@
 """
-Pydantic data schemas for API validation and documentation.
+Esquemas Pydantic para validación y documentación de la API.
 
-This module contains Pydantic models for validating and documenting data
-that is sent and received through the API endpoints. All models include
-proper type hints, validation rules, and documentation.
+Este módulo contiene los modelos Pydantic que validan y documentan
+todos los datos que van y vienen a través de los endpoints de la API.
+
+Como desarrollador fullstack, estos esquemas son súper importantes porque:
+- Validan automáticamente los datos que llegan (ej: que el email sea válido)
+- Generan la documentación automática en /docs
+- Definen exactamente qué campos espera cada endpoint
+
+Si FastAPI te dice que falta un campo o formato incorrecto, revisa estos esquemas.
 """
 
 from typing import Optional, List, Dict, Any
@@ -11,85 +17,68 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, validator
 import re
 
-# ===== Authentication Schemas =====
+# ===== Esquemas de Autenticación =====
 
 class TokenData(BaseModel):
     """
-    JWT token payload data structure.
+    Estructura de datos del payload del token JWT.
     
-    Attributes:
-        email (str): Administrator's email address.
-        admin_id (int): Administrator's unique identifier.
+    Esto es lo que va "dentro" del token cuando lo decodificas.
     """
-    email: str
-    admin_id: int
+    email: str        # Email del administrador
+    admin_id: int     # ID único del admin
 
 class Token(BaseModel):
     """
-    JWT access token response structure.
+    Respuesta cuando el login es exitoso.
     
-    Attributes:
-        access_token (str): JWT token string.
-        token_type (str): Token type (typically "bearer").
-        admin_id (int): Administrator's unique identifier.
-        email (str): Administrator's email address.
-        nombre (str): Administrator's display name.
-        es_superadmin (bool): Whether user has superadmin privileges.
+    Esto es lo que devuelve el endpoint /api/auth/token cuando
+    el usuario hace login correctamente.
     """
-    access_token: str
-    token_type: str
-    admin_id: int
-    email: str
-    nombre: str
-    es_superadmin: bool
+    access_token: str    # El token JWT que el frontend guarda
+    token_type: str      # Siempre "bearer" 
+    admin_id: int        # ID del admin que se logueó
+    email: str           # Email del admin
+    nombre: str          # Nombre para mostrar en el UI
+    es_superadmin: bool  # Si tiene privilegios de super admin
 
-# ===== Administrator Schemas =====
+# ===== Esquemas de Administradores =====
 
 class AdminBase(BaseModel):
     """
-    Base administrator model with common fields.
+    Campos básicos que todos los administradores tienen.
     
-    Attributes:
-        email (EmailStr): Valid email address.
-        nombre (str): Administrator's display name.
+    Otros esquemas heredan de este para no repetir código.
     """
-    email: EmailStr
-    nombre: str
+    email: EmailStr  # Email válido (Pydantic valida automáticamente)
+    nombre: str      # Nombre para mostrar
 
 class AdminCreate(AdminBase):
     """
-    Schema for creating a new administrator account.
+    Datos necesarios para crear un nuevo administrador.
     
-    Attributes:
-        password (str): Password with minimum 6 characters.
-        es_superadmin (bool): Whether to grant superadmin privileges.
+    Usado en el endpoint de registro de admins.
     """
-    password: str = Field(..., min_length=6, description="Minimum 6 characters")
-    es_superadmin: bool = Field(default=False, description="Grant superadmin access")
+    password: str = Field(..., min_length=6, description="Mínimo 6 caracteres")
+    es_superadmin: bool = Field(default=False, description="Dar acceso de super admin")
 
 class AdminUpdate(BaseModel):
     """
-    Schema for updating administrator information.
+    Esquema para actualizar información de administradores.
     
-    All fields are optional for partial updates.
-    
-    Attributes:
-        nombre (Optional[str]): New display name.
-        email (Optional[EmailStr]): New email address.
-        es_superadmin (Optional[bool]): Change superadmin status.
-        activo (Optional[bool]): Enable/disable account.
+    Todos los campos son opcionales para permitir actualizaciones parciales.
     """
-    nombre: Optional[str] = Field(None, description="Administrator display name")
-    email: Optional[EmailStr] = Field(None, description="Valid email address")
-    es_superadmin: Optional[bool] = Field(None, description="Superadmin privileges")
-    activo: Optional[bool] = Field(None, description="Account active status")
+    nombre: Optional[str] = Field(None, description="Nuevo nombre para mostrar")
+    email: Optional[EmailStr] = Field(None, description="Nuevo email válido")
+    es_superadmin: Optional[bool] = Field(None, description="Cambiar privilegios de super admin")
+    activo: Optional[bool] = Field(None, description="Activar/desactivar cuenta")
 
 class AdminResponse(AdminBase):
     """
-    Administrator data for API responses.
+    Datos del administrador para respuestas de la API.
     
-    Attributes:
-        id (int): Administrator's unique identifier.
+    Esto es lo que devuelve la API cuando consultas información de admins.
+    Nunca incluye la contraseña por seguridad.
     """
     id: int
     es_superadmin: bool

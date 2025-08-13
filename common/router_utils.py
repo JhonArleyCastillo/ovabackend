@@ -1,5 +1,11 @@
 """
-Utilidades y patrones compartidos para routers para eliminar redundancia entre routers.
+Utilidades compartidas para routers - evita repetir código.
+
+Este módulo contiene funciones y clases que usan múltiples routers
+para evitar copiar y pegar el mismo código en todos lados.
+
+Como desarrollador fullstack, si necesitas hacer algo similar en varios
+endpoints, probablemente deberías ponerlo aquí.
 """
 from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends
@@ -9,17 +15,22 @@ from functools import wraps
 import sys
 import os
 
-# Add the parent directory to sys.path to allow imports  
+# Agregamos el directorio padre para imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from common.database_utils import DatabaseManager, DbDependency
-from common.error_handlers import BaseError  # Ensure BaseError exists and is your base class
+from common.error_handlers import BaseError
 
 logger = logging.getLogger(__name__)
 
 
 class RouterFactory:
-    """Fábrica para crear routers estandarizados con patrones comunes."""
+    """
+    Fábrica para crear routers con configuración estándar.
+    
+    En lugar de configurar cada router manualmente, usa esto para
+    tener configuración consistente en todos los routers.
+    """
     
     @staticmethod
     def create_router(
@@ -27,7 +38,12 @@ class RouterFactory:
         tags: List[str],
         additional_responses: Optional[Dict] = None
     ) -> APIRouter:
-        """Crear un APIRouter estandarizado con configuración común."""
+        """
+        Crea un APIRouter con configuración estándar.
+        
+        Todos los routers creados aquí tendrán respuesta 404 por defecto
+        y cualquier respuesta adicional que especifiques.
+        """
         responses = {404: {"description": "Recurso no encontrado"}}
         if additional_responses:
             responses.update(additional_responses)
@@ -40,10 +56,16 @@ class RouterFactory:
 
 
 class CommonResponses:
-    """Respuestas HTTP estandarizadas."""
+    """
+    Respuestas HTTP estandarizadas para usar en todos los routers.
+    
+    En lugar de crear HTTPException manualmente cada vez,
+    usa estos métodos para tener mensajes consistentes.
+    """
     
     @staticmethod
     def not_found(detail: str = "Recurso no encontrado"):
+        """Error 404 - no se encontró lo que se buscaba."""
         return HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=detail
@@ -51,6 +73,7 @@ class CommonResponses:
     
     @staticmethod
     def bad_request(detail: str = "Solicitud incorrecta"):
+        """Error 400 - el cliente envió datos inválidos."""
         return HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=detail
@@ -58,6 +81,7 @@ class CommonResponses:
     
     @staticmethod
     def unauthorized(detail: str = "No autorizado"):
+        """Error 401 - falta token o token inválido."""
         return HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=detail,
@@ -66,6 +90,7 @@ class CommonResponses:
     
     @staticmethod
     def forbidden(detail: str = "Acceso denegado"):
+        """Error 403 - el usuario no tiene permisos para esta acción."""
         return HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=detail
@@ -73,6 +98,7 @@ class CommonResponses:
     
     @staticmethod
     def server_error(detail: str = "Error interno del servidor"):
+        """Error 500 - algo falló en el servidor."""
         return HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=detail
