@@ -12,7 +12,7 @@ from ovabackend.config import ALLOWED_ORIGINS, CORS_MAX_AGE, IS_DEVELOPMENT
 from ovabackend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router, resilience_router
 from ovabackend.logging_config import configure_logging
 from ovabackend.database import setup_database
-from ovabackend.middleware import https_security_middleware, validate_cors_origin
+from ovabackend.middleware import https_security_middleware, validate_cors_origin, GradioErrorMiddleware
 import ovabackend.db_models
 
 # Configuramos el logging antes que nada para tener visibilidad de todo
@@ -63,6 +63,10 @@ for origin in ALLOWED_ORIGINS:
         logger.warning(f"🚫 Origin filtrado por seguridad: {origin}")
 
 logger.info(f"✅ Origins validados para CORS: {filtered_origins}")
+
+# Middleware para manejar errores específicos de Gradio Client
+logger.info("🛠️ Configurando middleware para errores de Gradio...")
+app.add_middleware(GradioErrorMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

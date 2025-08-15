@@ -7,6 +7,8 @@ Este módulo soluciona las diferencias entre entornos:
 - Fallbacks automáticos cuando un servicio falla
 - Configuración dual según entorno
 
+Usa cliente robusto mejorado para solucionar errores como "bool is not iterable".
+
 Uso: GradioCompatibilityService.get_asl_prediction(image)
 """
 
@@ -29,6 +31,9 @@ try:
     GRADIO_AVAILABLE = True
 except ImportError:
     GRADIO_AVAILABLE = False
+
+# Importar nuestro cliente robusto que soluciona errores de Gradio
+from .gradio_robust_client import GradioRobustClient
     
 try:
     from huggingface_hub import login
@@ -68,41 +73,61 @@ class GradioCompatibilityService:
         else:
             logger.info("🛠️ Modo LOCAL/DESARROLLO - usando configuración simple")
     
-    def _create_gradio_client(self, space_url: str, with_auth: bool = True) -> Optional[Client]:
+    def _create_gradio_client(self, space_url: str, with_auth: bool = True, correlation_id: str = None) -> Optional[Any]:
         """
         Crea cliente Gradio con configuración apropiada según entorno.
+        
+        Ahora usa GradioRobustClient que soluciona problemas como 'bool is not iterable'.
         
         Args:
             space_url: URL del Gradio Space
             with_auth: Si debe usar autenticación (False para spaces públicos)
+            correlation_id: ID para tracking (opcional)
         """
         try:
             if not GRADIO_AVAILABLE:
                 logger.error("❌ gradio_client no está disponible")
                 return None
             
-            client_kwargs = {}
+            # Generar un ID de correlación si no se proporciona uno
+            correlation_id = correlation_id or f"asl_{int(time.time())}"
             
-            # En producción, intentar con autenticación si está disponible
+            # Determinar si usar autenticación
+            hf_token = None
             if self.is_production and with_auth and self.hf_token:
-                client_kwargs['hf_token'] = self.hf_token
                 logger.debug(f"🔐 Creando cliente autenticado para {space_url}")
+                hf_token = self.hf_token
             else:
-                logger.debug(f"🔓 Creando cliente sin autenticación para {space_url}")
+                logger.debug(f"� Creando cliente sin autenticación para {space_url}")
             
-            client = Client(space_url, **client_kwargs)
-            return client
+            # Crear cliente robusto con manejo especial de errores
+            client = GradioRobustClient(
+                space_url=space_url,
+                hf_token=hf_token,
+                correlation_id=correlation_id,
+                timeout=30.0,  # 30 segundos de timeout
+                max_retries=2   # 2 reintentos máximo
+            )
+            
+            # Verificar que el cliente se creó correctamente
+            health = client.health_check()
+            if health["is_available"]:
+                logger.info(f"✅ Cliente creado para {space_url} tipo: {health['client_type']}")
+                return client
+            else:
+                logger.error(f"❌ Cliente no disponible: {health['error']}")
+                return None
             
         except Exception as e:
             logger.error(f"❌ Error creando cliente Gradio para {space_url}: {e}")
             return None
     
-    def _try_gradio_prediction(self, client: Client, image_path: str, correlation_id: str) -> Optional[Dict[str, Any]]:
+    def _try_gradio_prediction(self, client: Any, image_path: str, correlation_id: str) -> Optional[Dict[str, Any]]:
         """
         Intenta predicción con un cliente Gradio específico.
         
         Args:
-            client: Cliente Gradio configurado
+            client: Cliente Gradio robusto
             image_path: Ruta al archivo de imagen temporal
             correlation_id: ID para tracking
             
@@ -111,90 +136,112 @@ class GradioCompatibilityService:
         """
         try:
             prefix = f"[ASL_GRADIO][{correlation_id}]"
+            start_time = time.time()
             
-            # Múltiples estrategias de llamada para diferentes firmas de Gradio
-            strategies = [
-                # Estrategia 1: Parámetro posicional con API name
-                {
-                    "name": "posicional_con_api",
-                    "params": lambda: [handle_file(image_path)],
-                    "api_names": ["/predict", "/process", "/classify"]
-                },
-                # Estrategia 2: Parámetro nombrado con API name
-                {
-                    "name": "nombrado_con_api", 
-                    "params": lambda: {"image": handle_file(image_path)},
-                    "api_names": ["/predict", "/process", "/classify"]
-                },
-                # Estrategia 3: Solo parámetro posicional (API por defecto)
-                {
-                    "name": "solo_posicional",
-                    "params": lambda: [handle_file(image_path)],
-                    "api_names": [None]  # Sin api_name específico
-                },
-                # Estrategia 4: Solo parámetro nombrado (API por defecto)
-                {
-                    "name": "solo_nombrado",
-                    "params": lambda: {"image": handle_file(image_path)},
-                    "api_names": [None]
-                }
-            ]
-            
-            result = None
-            for strategy in strategies:
-                strategy_name = strategy["name"]
-                api_names = strategy["api_names"]
+            # Verificar si estamos usando nuestro cliente robusto o el original
+            if isinstance(client, GradioRobustClient):
+                logger.debug(f"{prefix} Usando cliente robusto para predicción")
                 
-                for api_name in api_names:
-                    try:
-                        api_display = api_name or "default"
-                        logger.debug(f"{prefix} Probando {strategy_name} con API: {api_display}")
-                        start_time = time.time()
-                        
-                        # Obtener parámetros para esta estrategia
-                        params = strategy["params"]()
-                        
-                        # Llamar según el tipo de parámetros
-                        if isinstance(params, dict):
-                            # Parámetros nombrados
-                            if api_name:
-                                result = client.predict(**params, api_name=api_name)
+                # El cliente robusto maneja todo internamente
+                result = client.predict(image_path)
+                
+                # El cliente robusto ya devuelve resultados parseados
+                if "error" in result and result.get("confianza", 0) <= 0:
+                    logger.error(f"{prefix} ❌ Error en predicción robusta: {result['error']}")
+                    return None
+                
+                call_ms = (time.time() - start_time) * 1000
+                logger.info(f"{prefix} ✅ Éxito con cliente robusto en {call_ms:.1f}ms")
+                return result
+                
+            else:
+                # Retrocompatibilidad: código original para clientes antiguos
+                # Esta parte no debería ejecutarse con la nueva implementación
+                logger.warning(f"{prefix} ⚠️ Usando cliente legacy - debería actualizarse")
+                
+                # Múltiples estrategias de llamada para diferentes firmas de Gradio
+                strategies = [
+                    # Estrategia 1: Parámetro posicional con API name
+                    {
+                        "name": "posicional_con_api",
+                        "params": lambda: [handle_file(image_path)],
+                        "api_names": ["/predict", "/process", "/classify"]
+                    },
+                    # Estrategia 2: Parámetro nombrado con API name
+                    {
+                        "name": "nombrado_con_api", 
+                        "params": lambda: {"image": handle_file(image_path)},
+                        "api_names": ["/predict", "/process", "/classify"]
+                    },
+                    # Estrategia 3: Solo parámetro posicional (API por defecto)
+                    {
+                        "name": "solo_posicional",
+                        "params": lambda: [handle_file(image_path)],
+                        "api_names": [None]  # Sin api_name específico
+                    },
+                    # Estrategia 4: Solo parámetro nombrado (API por defecto)
+                    {
+                        "name": "solo_nombrado",
+                        "params": lambda: {"image": handle_file(image_path)},
+                        "api_names": [None]
+                    }
+                ]
+                
+                result = None
+                for strategy in strategies:
+                    strategy_name = strategy["name"]
+                    api_names = strategy["api_names"]
+                    
+                    for api_name in api_names:
+                        try:
+                            api_display = api_name or "default"
+                            logger.debug(f"{prefix} Probando {strategy_name} con API: {api_display}")
+                            start_time = time.time()
+                            
+                            # Obtener parámetros para esta estrategia
+                            params = strategy["params"]()
+                            
+                            # Llamar según el tipo de parámetros
+                            if isinstance(params, dict):
+                                # Parámetros nombrados
+                                if api_name:
+                                    result = client.predict(**params, api_name=api_name)
+                                else:
+                                    result = client.predict(**params)
                             else:
-                                result = client.predict(**params)
-                        else:
-                            # Parámetros posicionales
-                            if api_name:
-                                result = client.predict(*params, api_name=api_name)
+                                # Parámetros posicionales
+                                if api_name:
+                                    result = client.predict(*params, api_name=api_name)
+                                else:
+                                    result = client.predict(*params)
+                            
+                            call_ms = (time.time() - start_time) * 1000
+                            logger.info(f"{prefix} ✅ Éxito con {strategy_name}:{api_display} en {call_ms:.1f}ms")
+                            break
+                            
+                        except Exception as api_error:
+                            error_msg = str(api_error).lower()
+                            if "bool" in error_msg and "iterable" in error_msg:
+                                logger.debug(f"{prefix} ❌ {strategy_name}:{api_display} - Error de tipo bool (parámetros incompatibles)")
                             else:
-                                result = client.predict(*params)
-                        
-                        call_ms = (time.time() - start_time) * 1000
-                        logger.info(f"{prefix} ✅ Éxito con {strategy_name}:{api_display} en {call_ms:.1f}ms")
+                                logger.debug(f"{prefix} ❌ {strategy_name}:{api_display} - {api_error}")
+                            continue
+                    
+                    # Si encontramos resultado, salir del loop de estrategias
+                    if result is not None:
                         break
-                        
-                    except Exception as api_error:
-                        error_msg = str(api_error).lower()
-                        if "bool" in error_msg and "iterable" in error_msg:
-                            logger.debug(f"{prefix} ❌ {strategy_name}:{api_display} - Error de tipo bool (parámetros incompatibles)")
-                        else:
-                            logger.debug(f"{prefix} ❌ {strategy_name}:{api_display} - {api_error}")
-                        continue
                 
-                # Si encontramos resultado, salir del loop de estrategias
-                if result is not None:
-                    break
-            
-            if result is None:
-                logger.error(f"{prefix} ❌ Todos los API names fallaron")
-                return None
-            
-            # Procesar resultado
-            return self._parse_gradio_result(result, correlation_id)
+                if result is None:
+                    logger.error(f"{prefix} ❌ Todos los API names fallaron")
+                    return None
+                
+                # Procesar resultado para cliente legacy
+                return self._parse_gradio_result(result, correlation_id)
             
         except Exception as e:
             logger.error(f"❌ Error en predicción Gradio: {e}")
             return None
-    
+            
     def _parse_gradio_result(self, result: Any, correlation_id: str) -> Dict[str, Any]:
         """
         Parsea el resultado de Gradio a formato estándar.

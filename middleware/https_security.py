@@ -10,7 +10,7 @@ Este middleware garantiza que en producción:
 from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse
 import logging
-from config import IS_DEVELOPMENT, FORCE_HTTPS, SECURITY_HEADERS
+from ovabackend.config import IS_DEVELOPMENT, FORCE_HTTPS, SECURITY_HEADERS
 
 logger = logging.getLogger(__name__)
 
