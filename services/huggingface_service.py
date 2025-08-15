@@ -2,7 +2,7 @@ from huggingface_hub import InferenceClient
 import sys
 import os
 
-# Add the parent directory to sys.path to allow imports
+# Añade rutas relevantes al sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from config import HF_API_KEY
