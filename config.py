@@ -84,7 +84,7 @@ HF_MODEL: Optional[str] = os.getenv("HF_MODEL")
 
 # ¡IMPORTANTE! Esta es la URL del Gradio Space que hace el reconocimiento ASL
 # Si no funciona ASL, revisa que esta URL esté correcta y el Space esté activo
-HF_ASL_SPACE_URL: str = os.getenv(
+HF_ASL_SPACE_URL: Optional[str] = os.getenv(
     "HF_ASL_SPACE_URL",
     "https://jhonarleycastillov-asl-image.hf.space"
 )

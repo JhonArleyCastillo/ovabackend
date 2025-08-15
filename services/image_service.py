@@ -107,8 +107,6 @@ async def analyze_image_async(image: Image.Image) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error en análisis de imagen: {str(e)}")
         raise RuntimeError(f"Fallo el análisis de imagen: {str(e)}")
-    
-    return result
 
 async def analyze_image(image: Image.Image) -> dict:
     """

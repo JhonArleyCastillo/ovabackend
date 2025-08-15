@@ -94,54 +94,61 @@ def _invoke_space(provider: Dict[str, Any], user_input: str, system_prompt: Opti
     final_system = system_prompt or DEFAULT_SYSTEM_PROMPT if supports_system else None
     history_empty = []  # asegurar iterable por defecto
 
-    # Intento 1: Firma típica (prompt/history/system_prompt/...)
+    # Intento 1: Usar argumentos posicionales para evitar problemas de nombres
     try:
-        kwargs = {
-            "prompt": user_input,
-            "history": history_empty,
-            "max_new_tokens": max_tokens,
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "top_k": 50,
-            "repetition_penalty": 1.0,
-            "api_name": api_name,
-        }
         if supports_system:
-            kwargs["system_prompt"] = final_system
-        result = client.predict(**kwargs)
+            # Para Spaces que soportan system prompt: (message, history, system_prompt, max_tokens, ...)
+            result = client.predict(
+                user_input,           # mensaje del usuario
+                history_empty,        # historial (lista vacía)
+                final_system,         # system prompt
+                max_tokens,           # tokens máximos
+                0.7,                  # temperature
+                0.9,                  # top_p
+                50,                   # top_k
+                1.0,                  # repetition_penalty
+                api_name=api_name
+            )
+        else:
+            # Para Spaces sin system prompt: (message, history, max_tokens, ...)
+            result = client.predict(
+                user_input,           # mensaje del usuario
+                history_empty,        # historial (lista vacía)
+                max_tokens,           # tokens máximos
+                0.7,                  # temperature
+                0.9,                  # top_p
+                50,                   # top_k
+                1.0,                  # repetition_penalty
+                api_name=api_name
+            )
         return _normalize_result(result, provider)
-    except Exception:
+    except Exception as e1:
         pass
 
-    # Intento 2: Algunos Spaces usan 'message' y 'chat_history'
+    # Intento 2: Simplificado con solo mensaje e historial
     try:
-        kwargs = {
-            "message": user_input,
-            "chat_history": history_empty,
-            "max_new_tokens": max_tokens,
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "top_k": 50,
-            "repetition_penalty": 1.0,
-            "api_name": api_name,
-        }
-        if supports_system:
-            kwargs["system_prompt"] = final_system
-        result = client.predict(**kwargs)
+        result = client.predict(
+            user_input,               # mensaje
+            history_empty,            # historial como lista vacía
+            api_name=api_name
+        )
         return _normalize_result(result, provider)
-    except Exception:
+    except Exception as e2:
         pass
 
-    # Intento 3: Firma simplificada 'input'
+    # Intento 3: Solo el mensaje (más básico)
     try:
-        kwargs = {
-            "input": user_input,
-            "api_name": api_name,
-        }
-        result = client.predict(**kwargs)
+        result = client.predict(user_input, api_name=api_name)
         return _normalize_result(result, provider)
-    except Exception as e:
-        raise RuntimeError(f"Error en llamada a Hugging Face Chat UI: {e}")
+    except Exception as e3:
+        pass
+
+    # Intento 4: Probar sin api_name específico (usar el predeterminado)
+    try:
+        result = client.predict(user_input, history_empty)
+        return _normalize_result(result, provider)
+    except Exception as e4:
+        raise RuntimeError(f"Todos los intentos de llamada fallaron. Último error: {e4}")
 
 def _invoke_model(provider: Dict[str, Any], user_input: str, system_prompt: Optional[str], max_tokens: int) -> str:
     client = _create_model_client(provider["resource"])
@@ -247,7 +254,15 @@ def _call_with_fallbacks(user_input: str, system_prompt: str = None, max_tokens:
             logger.info(f"✅ Éxito con {provider['name']}")
             return response
         except Exception as e:
-            logger.warning(f"❌ Falló {provider['name']}: {e}")
+            error_msg = str(e)
+            # Detectar errores específicos de bool iteration
+            if "'bool' object is not iterable" in error_msg:
+                logger.warning(f"❌ {provider['name']}: Error de tipo bool no iterable - probablemente parámetros incorrectos para la API Gradio")
+            elif "argument of type 'bool' is not iterable" in error_msg:
+                logger.warning(f"❌ {provider['name']}: Error de argumento bool - verificando firma de API")
+            else:
+                logger.warning(f"❌ Falló {provider['name']}: {e}")
+            
             if i == len(CHAT_PROVIDERS) - 1:
                 logger.info("⚙️ Usando fallback local static")
                 return _get_fallback_response(user_input)
