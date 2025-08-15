@@ -112,27 +112,77 @@ class GradioCompatibilityService:
         try:
             prefix = f"[ASL_GRADIO][{correlation_id}]"
             
-            # Intentar diferentes API names comunes
-            api_names = ["/predict", "/process", "/classify", "/api_name"]
+            # Múltiples estrategias de llamada para diferentes firmas de Gradio
+            strategies = [
+                # Estrategia 1: Parámetro posicional con API name
+                {
+                    "name": "posicional_con_api",
+                    "params": lambda: [handle_file(image_path)],
+                    "api_names": ["/predict", "/process", "/classify"]
+                },
+                # Estrategia 2: Parámetro nombrado con API name
+                {
+                    "name": "nombrado_con_api", 
+                    "params": lambda: {"image": handle_file(image_path)},
+                    "api_names": ["/predict", "/process", "/classify"]
+                },
+                # Estrategia 3: Solo parámetro posicional (API por defecto)
+                {
+                    "name": "solo_posicional",
+                    "params": lambda: [handle_file(image_path)],
+                    "api_names": [None]  # Sin api_name específico
+                },
+                # Estrategia 4: Solo parámetro nombrado (API por defecto)
+                {
+                    "name": "solo_nombrado",
+                    "params": lambda: {"image": handle_file(image_path)},
+                    "api_names": [None]
+                }
+            ]
             
             result = None
-            for api_name in api_names:
-                try:
-                    logger.debug(f"{prefix} Probando API name: {api_name}")
-                    start_time = time.time()
-                    
-                    result = client.predict(
-                        image=handle_file(image_path),
-                        api_name=api_name
-                    )
-                    
-                    call_ms = (time.time() - start_time) * 1000
-                    logger.info(f"{prefix} ✅ Éxito con {api_name} en {call_ms:.1f}ms")
+            for strategy in strategies:
+                strategy_name = strategy["name"]
+                api_names = strategy["api_names"]
+                
+                for api_name in api_names:
+                    try:
+                        api_display = api_name or "default"
+                        logger.debug(f"{prefix} Probando {strategy_name} con API: {api_display}")
+                        start_time = time.time()
+                        
+                        # Obtener parámetros para esta estrategia
+                        params = strategy["params"]()
+                        
+                        # Llamar según el tipo de parámetros
+                        if isinstance(params, dict):
+                            # Parámetros nombrados
+                            if api_name:
+                                result = client.predict(**params, api_name=api_name)
+                            else:
+                                result = client.predict(**params)
+                        else:
+                            # Parámetros posicionales
+                            if api_name:
+                                result = client.predict(*params, api_name=api_name)
+                            else:
+                                result = client.predict(*params)
+                        
+                        call_ms = (time.time() - start_time) * 1000
+                        logger.info(f"{prefix} ✅ Éxito con {strategy_name}:{api_display} en {call_ms:.1f}ms")
+                        break
+                        
+                    except Exception as api_error:
+                        error_msg = str(api_error).lower()
+                        if "bool" in error_msg and "iterable" in error_msg:
+                            logger.debug(f"{prefix} ❌ {strategy_name}:{api_display} - Error de tipo bool (parámetros incompatibles)")
+                        else:
+                            logger.debug(f"{prefix} ❌ {strategy_name}:{api_display} - {api_error}")
+                        continue
+                
+                # Si encontramos resultado, salir del loop de estrategias
+                if result is not None:
                     break
-                    
-                except Exception as api_error:
-                    logger.debug(f"{prefix} ❌ Fallo {api_name}: {api_error}")
-                    continue
             
             if result is None:
                 logger.error(f"{prefix} ❌ Todos los API names fallaron")

@@ -93,6 +93,9 @@ def _invoke_space(provider: Dict[str, Any], user_input: str, system_prompt: Opti
 
     final_system = system_prompt or DEFAULT_SYSTEM_PROMPT if supports_system else None
     history_empty = []  # asegurar iterable por defecto
+    
+    # Variables para tracking de errores
+    e1 = e2 = e3 = e4 = e5 = None
 
     # Intento 1: Usar argumentos posicionales para evitar problemas de nombres
     try:
@@ -123,7 +126,11 @@ def _invoke_space(provider: Dict[str, Any], user_input: str, system_prompt: Opti
             )
         return _normalize_result(result, provider)
     except Exception as e1:
-        pass
+        error_msg = str(e1).lower()
+        if "bool" in error_msg and "iterable" in error_msg:
+            logger.debug(f"❌ Intento 1 falló - Error bool no iterable: {e1}")
+        else:
+            logger.debug(f"❌ Intento 1 falló: {e1}")
 
     # Intento 2: Simplificado con solo mensaje e historial
     try:
@@ -134,21 +141,56 @@ def _invoke_space(provider: Dict[str, Any], user_input: str, system_prompt: Opti
         )
         return _normalize_result(result, provider)
     except Exception as e2:
-        pass
+        error_msg = str(e2).lower()
+        if "bool" in error_msg and "iterable" in error_msg:
+            logger.debug(f"❌ Intento 2 falló - Error bool no iterable: {e2}")
+        else:
+            logger.debug(f"❌ Intento 2 falló: {e2}")
 
     # Intento 3: Solo el mensaje (más básico)
     try:
         result = client.predict(user_input, api_name=api_name)
         return _normalize_result(result, provider)
     except Exception as e3:
-        pass
+        error_msg = str(e3).lower()
+        if "bool" in error_msg and "iterable" in error_msg:
+            logger.debug(f"❌ Intento 3 falló - Error bool no iterable: {e3}")
+        else:
+            logger.debug(f"❌ Intento 3 falló: {e3}")
 
     # Intento 4: Probar sin api_name específico (usar el predeterminado)
     try:
         result = client.predict(user_input, history_empty)
         return _normalize_result(result, provider)
     except Exception as e4:
-        raise RuntimeError(f"Todos los intentos de llamada fallaron. Último error: {e4}")
+        error_msg = str(e4).lower()
+        if "bool" in error_msg and "iterable" in error_msg:
+            logger.debug(f"❌ Intento 4 falló - Error bool no iterable: {e4}")
+        else:
+            logger.debug(f"❌ Intento 4 falló: {e4}")
+
+    # Intento 5: Solo mensaje, sin historial ni api_name
+    try:
+        result = client.predict(user_input)
+        return _normalize_result(result, provider)
+    except Exception as e5:
+        error_msg = str(e5).lower()
+        if "bool" in error_msg and "iterable" in error_msg:
+            logger.warning(f"❌ Intento 5 falló - Problema de compatibilidad con bool: {e5}")
+        else:
+            logger.debug(f"❌ Intento 5 falló: {e5}")
+
+    # Recopilar todos los errores para diagnóstico
+    errors_summary = [
+        f"Intento 1: {type(e1).__name__}",
+        f"Intento 2: {type(e2).__name__}",
+        f"Intento 3: {type(e3).__name__}",
+        f"Intento 4: {type(e4).__name__}",
+        f"Intento 5: {type(e5).__name__}"
+    ]
+    
+    logger.error(f"❌ Todos los intentos fallaron para {provider['name']}: {', '.join(errors_summary)}")
+    raise RuntimeError(f"Todos los intentos de llamada fallaron. Errores: {errors_summary}")
 
 def _invoke_model(provider: Dict[str, Any], user_input: str, system_prompt: Optional[str], max_tokens: int) -> str:
     client = _create_model_client(provider["resource"])
