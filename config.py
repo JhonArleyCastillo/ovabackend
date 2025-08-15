@@ -59,12 +59,28 @@ else:
     logger.info(f"Usando MySQL: {DB_HOST}:{DB_PORT} base={DB_NAME}")
 
 # ===== Configuración de Hugging Face y modelos de AI =====
-# Token opcional para APIs privadas de Hugging Face
-HF_API_KEY: Optional[str] = os.getenv("HF_API_KEY")
+# Token opcional para APIs privadas de Hugging Face (nombre histórico HF_API_KEY)
+# Unificamos bajo HF_TOKEN para uso consistente (Gradio + InferenceClient)
+HF_TOKEN: Optional[str] = os.getenv("HF_TOKEN")
+HF_API_KEY: Optional[str] = os.getenv("HF_API_KEY")  # Backward compatibility
+
+# Alias: si solo uno existe, usarlo para ambos
+if not HF_TOKEN and HF_API_KEY:
+    HF_TOKEN = HF_API_KEY
+if not HF_API_KEY and HF_TOKEN:
+    HF_API_KEY = HF_TOKEN
+
+if ENVIRONMENT.lower() == "production" and not HF_TOKEN:
+    logger.warning("⚠️  No se encontró HF_TOKEN en producción - acceso a Spaces privados fallará")
+elif HF_TOKEN:
+    logger.info("🔐 HF_TOKEN detectado - listo para autenticación Hugging Face")
 
 # Modelos opcionales para features adicionales (caption, etc.)
 HF_MODEL: Optional[str] = os.getenv("HF_MODEL")
-HF_MODELO_SIGN: str = os.getenv("HF_MODELO_SIGN", "default-sign-language-model")  # Legacy, no se usa mucho
+
+# NOTA: Eliminado soporte de "modelo sign" directo (HF_MODELO_SIGN).
+# Ahora el reconocimiento ASL usa exclusivamente el Space de Hugging Face
+# configurado en HF_ASL_SPACE_URL con autenticación via HF_TOKEN.
 
 # ¡IMPORTANTE! Esta es la URL del Gradio Space que hace el reconocimiento ASL
 # Si no funciona ASL, revisa que esta URL esté correcta y el Space esté activo

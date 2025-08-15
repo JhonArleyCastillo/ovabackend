@@ -90,34 +90,32 @@ class AdminResponse(AdminBase):
         from_attributes = True
 
 class AdminChangePassword(BaseModel):
+    """Esquema para cambiar la contraseña de un administrador.
+
+    Atributos:
+        password_actual (str): Contraseña actual para validar identidad.
+        nueva_password (str): Nueva contraseña (mínimo 8 caracteres) que debe incluir letras, números y símbolos.
     """
-    Schema for changing administrator password.
-    
-    Attributes:
-        password_actual (str): Current password for verification.
-        nueva_password (str): New password with minimum 8 characters.
-    """
-    password_actual: str = Field(..., description="Current password")
+    password_actual: str = Field(..., description="Contraseña actual")
     nueva_password: str = Field(
         ..., 
         min_length=8,
-        description="New password (8+ chars, letters, numbers, symbols)"
+        description="Nueva contraseña (8+ caracteres, letras, números y símbolos)"
     )
     
     @validator('nueva_password')
     @classmethod
     def validate_password(cls, v: str) -> str:
-        """
-        Validate password strength requirements.
-        
-        Args:
-            v (str): Password to validate.
-            
-        Returns:
-            str: Validated password.
-            
-        Raises:
-            ValueError: If password doesn't meet requirements.
+        """Valida que la contraseña cumpla los requisitos mínimos de seguridad.
+
+        Parámetros:
+            v (str): Contraseña a validar.
+
+        Retorna:
+            str: La contraseña validada (sin modificar).
+
+        Lanza:
+            ValueError: Si no cumple longitud o composición exigida.
         """
         pattern = (
             r'^(?=.*[A-Za-z])(?=.*\d)(?=.*[$@$!%*?&])'
@@ -134,14 +132,13 @@ class AdminChangePassword(BaseModel):
 # ===== Administrator Session Schemas =====
 
 class SesionAdminBase(BaseModel):
-    """
-    Base model for administrator sessions.
-    
-    Attributes:
-        admin_id (int): Administrator's unique identifier.
-        token (str): Session token.
-        ip_address (Optional[str]): Client IP address.
-        navegador (Optional[str]): Browser information.
+    """Modelo base para sesiones de administradores.
+
+    Atributos:
+        admin_id (int): ID único del administrador.
+        token (str): Token asociado a la sesión.
+        ip_address (Optional[str]): Dirección IP del cliente.
+        navegador (Optional[str]): Información del navegador.
     """
     admin_id: int
     token: str
@@ -149,16 +146,15 @@ class SesionAdminBase(BaseModel):
     navegador: Optional[str] = None
 
 class SesionAdminResponse(SesionAdminBase):
-    """
-    Administrator session data for API responses.
-    
-    Attributes:
-        id (int): Session unique identifier.
-        fecha_inicio (datetime): Session start time.
-        fecha_expiracion (datetime): Session expiration time.
-        activa (bool): Whether session is active.
-        admin_email (str): Administrator's email.
-        admin_nombre (str): Administrator's name.
+    """Datos de una sesión de administrador para respuestas de la API.
+
+    Atributos:
+        id (int): ID único de la sesión.
+        fecha_inicio (datetime): Cuándo se inició.
+        fecha_expiracion (datetime): Cuándo expira.
+        activa (bool): Si la sesión sigue activa.
+        admin_email (str): Email del administrador.
+        admin_nombre (str): Nombre del administrador.
     """
     id: int
     fecha_inicio: datetime
@@ -173,14 +169,13 @@ class SesionAdminResponse(SesionAdminBase):
 # ===== Contact Schemas =====
 
 class ContactoCreate(BaseModel):
-    """
-    Schema for creating a new contact message.
-    
-    Attributes:
-        nombre_completo (str): Full name of the contact person.
-        email (EmailStr): Valid email address.
-        asunto (str): Message subject.
-        mensaje (str): Message content.
+    """Esquema para crear un nuevo mensaje de contacto.
+
+    Atributos:
+        nombre_completo (str): Nombre completo de la persona que escribe.
+        email (EmailStr): Correo válido.
+        asunto (str): Asunto del mensaje.
+        mensaje (str): Contenido del mensaje.
     """
     nombre_completo: str = Field(
         ..., 
@@ -205,17 +200,16 @@ class ContactoCreate(BaseModel):
     @validator('nombre_completo')
     @classmethod
     def nombre_must_be_valid(cls, v: str) -> str:
-        """
-        Validate that the full name is not empty.
-        
-        Args:
-            v (str): Full name to validate.
-            
-        Returns:
-            str: Validated and trimmed full name.
-            
-        Raises:
-            ValueError: If name is empty after stripping whitespace.
+        """Valida que el nombre no esté vacío.
+
+        Parámetros:
+            v (str): Nombre completo a validar.
+
+        Retorna:
+            str: Nombre limpio (sin espacios extremos).
+
+        Lanza:
+            ValueError: Si el nombre queda vacío tras hacer strip().
         """
         if not v.strip():
             raise ValueError('Full name cannot be empty')
@@ -224,17 +218,16 @@ class ContactoCreate(BaseModel):
     @validator('asunto')
     @classmethod
     def asunto_must_be_valid(cls, v: str) -> str:
-        """
-        Validate that the subject is not empty.
-        
-        Args:
-            v (str): Subject to validate.
-            
-        Returns:
-            str: Validated and trimmed subject.
-            
-        Raises:
-            ValueError: If subject is empty after stripping whitespace.
+        """Valida que el asunto no esté vacío.
+
+        Parámetros:
+            v (str): Asunto a validar.
+
+        Retorna:
+            str: Asunto limpio.
+
+        Lanza:
+            ValueError: Si queda vacío tras strip().
         """
         if not v.strip():
             raise ValueError('Subject cannot be empty')
@@ -243,31 +236,29 @@ class ContactoCreate(BaseModel):
     @validator('mensaje')
     @classmethod
     def mensaje_must_be_valid(cls, v: str) -> str:
-        """
-        Validate that the message is not empty.
-        
-        Args:
-            v (str): Message to validate.
-            
-        Returns:
-            str: Validated and trimmed message.
-            
-        Raises:
-            ValueError: If message is empty after stripping whitespace.
+        """Valida que el mensaje no esté vacío.
+
+        Parámetros:
+            v (str): Mensaje a validar.
+
+        Retorna:
+            str: Mensaje limpio.
+
+        Lanza:
+            ValueError: Si queda vacío tras strip().
         """
         if not v.strip():
             raise ValueError('Message cannot be empty')
         return v.strip()
 
 class ContactoResponse(ContactoCreate):
-    """
-    Contact message data for API responses.
-    
-    Attributes:
-        id (int): Contact message unique identifier.
-        fecha_envio (datetime): Message send timestamp.
-        leido (bool): Whether message has been read.
-        respondido (bool): Whether message has been responded to.
+    """Datos de un mensaje de contacto para respuestas de API.
+
+    Atributos:
+        id (int): ID único del mensaje.
+        fecha_envio (datetime): Cuándo se envió.
+        leido (bool): Si fue marcado como leído.
+        respondido (bool): Si se respondió.
     """
     id: int
     fecha_envio: datetime
@@ -279,12 +270,11 @@ class ContactoResponse(ContactoCreate):
         allow_population_by_field_name = True
 
 class ContactoUpdate(BaseModel):
-    """
-    Schema for updating contact message status.
-    
-    Attributes:
-        leido (Optional[bool]): Mark message as read/unread.
-        respondido (Optional[bool]): Mark message as responded/not responded.
+    """Esquema para actualizar el estado de un mensaje de contacto.
+
+    Atributos:
+        leido (Optional[bool]): Marcar como leído/no leído.
+        respondido (Optional[bool]): Marcar como respondido/no respondido.
     """
     leido: Optional[bool] = Field(
         None, 
@@ -298,32 +288,29 @@ class ContactoUpdate(BaseModel):
 # ===== User Schemas =====
 
 class UsuarioBase(BaseModel):
-    """
-    Base user model with common fields.
-    
-    Attributes:
-        email (EmailStr): Valid email address.
-        nombre (str): User's display name.
+    """Modelo base de usuario con campos comunes.
+
+    Atributos:
+        email (EmailStr): Correo válido.
+        nombre (str): Nombre para mostrar.
     """
     email: EmailStr = Field(..., description="Valid email address")
     nombre: str = Field(..., description="User's display name")
 
 class UsuarioCreate(UsuarioBase):
-    """
-    Schema for creating a new user/subscriber.
-    
-    Inherits all fields from UsuarioBase without additional requirements.
+    """Esquema para crear un nuevo usuario/suscriptor.
+
+    Hereda todos los campos de UsuarioBase sin requisitos extra.
     """
     pass
 
 class UsuarioResponse(UsuarioBase):
-    """
-    User data for API responses.
-    
-    Attributes:
-        id (int): User's unique identifier.
-        activo (bool): Whether user account is active.
-        fecha_registro (datetime): User registration timestamp.
+    """Datos de usuario para respuestas de la API.
+
+    Atributos:
+        id (int): ID único del usuario.
+        activo (bool): Si la cuenta está activa.
+        fecha_registro (datetime): Fecha/hora de registro.
     """
     id: int
     activo: bool

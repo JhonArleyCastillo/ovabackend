@@ -1,83 +1,176 @@
 import logging
 import asyncio
-from gradio_client import Client
+from typing import Optional, Dict, Any
 from .resilience_service import ResilienceService
+
+# Importes condicionales para no romper en entornos sin dependencias
+try:
+    from gradio_client import Client
+    GRADIO_AVAILABLE = True
+except ImportError:
+    GRADIO_AVAILABLE = False
+
+try:
+    from huggingface_hub import InferenceClient
+    HF_AVAILABLE = True
+except ImportError:
+    HF_AVAILABLE = False
+
+try:
+    from config import HF_TOKEN, ENVIRONMENT
+except Exception:
+    from os import getenv
+    HF_TOKEN = getenv("HF_TOKEN")
+    ENVIRONMENT = getenv("ENVIRONMENT", "development")
 
 logger = logging.getLogger(__name__)
 
-# Lista de endpoints de Hugging Face con fallbacks
-GRADIO_ENDPOINTS = [
+"""
+Definición unificada de proveedores de chat.
+
+TIPOS:
+ - space  : Hugging Face Space (Gradio UI) => se usa gradio_client.Client
+ - model  : Repositorio de modelo puro => se usa InferenceClient (text_generation)"""
+
+CHAT_PROVIDERS = [
     {
-        "name": "GPT-OSS-20B",
-        "endpoint": "merterbak/gpt-oss-20b-demo",
+        "name": "GPT-OSS-20B Demo Space",
+        "resource": "merterbak/gpt-oss-20b-demo",  # Space (Gradio)
+        "resource_type": "space",
         "api_name": "/chat",
         "supports_system_prompt": True
     },
     {
-        "name": "Microsoft DialoGPT",
-        "endpoint": "microsoft/DialoGPT-medium",
-        "api_name": "/predict",
+        "name": "AMD 120B Chatbot Space",
+        "resource": "amd/gpt-oss-120b-chatbot",    # Space (Gradio)
+        "resource_type": "space",
+        "api_name": "/chat",
+        "supports_system_prompt": True
+    },
+    {
+        "name": "DialoGPT Medium (Modelo)",        # Modelo puro (NO Space)
+        "resource": "microsoft/DialoGPT-medium",
+        "resource_type": "model",
         "supports_system_prompt": False
-    },
-    {
-        "name": "Hugging Face Chat UI",
-        "endpoint": "amd/gpt-oss-120b-chatbot",
-        "api_name": "/chat",
-        "supports_system_prompt": True
     }
 ]
 
+# Ajuste de orden según entorno: en prod podemos priorizar modelo directo (menos latencia UI)
+if ENVIRONMENT.lower() == "production":
+    CHAT_PROVIDERS = (
+        [p for p in CHAT_PROVIDERS if p["resource_type"] == "model"] +
+        [p for p in CHAT_PROVIDERS if p["resource_type"] == "space"]
+    )
+
 DEFAULT_SYSTEM_PROMPT = "Eres un asistente útil y amigable. Responde de manera clara y concisa en español."
 
-def _create_gradio_client(endpoint: str):
-    """Crea una instancia del cliente Gradio para un endpoint específico."""
-    try:
-        return Client(endpoint)
-    except Exception as e:
-        logger.error(f"Error al crear cliente Gradio para {endpoint}: {e}")
-        raise
+# ================= Utilidades internas ================= #
 
-def _call_gradio_endpoint(endpoint_config: dict, user_input: str, system_prompt: str = None, max_tokens: int = 1024) -> str:
-    """Llama a un endpoint específico de Gradio."""
+def _create_space_client(space_slug: str) -> Client:
+    """Crea un cliente Gradio para un Space. Usa token si existe (para Spaces privados)."""
+    if not GRADIO_AVAILABLE:
+        raise RuntimeError("gradio_client no instalado - no se puede usar Spaces")
+    kwargs = {}
+    if HF_TOKEN:
+        kwargs["hf_token"] = HF_TOKEN
+    return Client(space_slug, **kwargs)
+
+def _create_model_client(model_id: str) -> InferenceClient:
+    """Crea un cliente de inferencia para un modelo puro (sin interfaz Space)."""
+    if not HF_AVAILABLE:
+        raise RuntimeError("huggingface_hub no instalado - no se puede usar modelos directos")
+    return InferenceClient(model=model_id, token=HF_TOKEN) if HF_TOKEN else InferenceClient(model=model_id)
+
+def _invoke_space(provider: Dict[str, Any], user_input: str, system_prompt: Optional[str], max_tokens: int) -> str:
+    """
+    Invoca un Space de chat de manera robusta probando diferentes firmas comunes.
+    Corrige el caso donde algunos Spaces esperan un historial iterable y darían
+    'TypeError: bool is not iterable' si reciben False/None.
+    """
+    client = _create_space_client(provider["resource"])
+    api_name = provider.get("api_name", "/chat")
+    supports_system = provider.get("supports_system_prompt", False)
+
+    final_system = system_prompt or DEFAULT_SYSTEM_PROMPT if supports_system else None
+    history_empty = []  # asegurar iterable por defecto
+
+    # Intento 1: Firma típica (prompt/history/system_prompt/...)
     try:
-        client = _create_gradio_client(endpoint_config["endpoint"])
-        
-        if endpoint_config["supports_system_prompt"]:
-            # Endpoint que soporta system prompt
-            final_system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
-            
-            result = client.predict(
-                input_data=user_input,
-                max_new_tokens=max_tokens,
-                system_prompt=final_system_prompt,
-                temperature=0.7,
-                top_p=0.9,
-                top_k=50,
-                repetition_penalty=1.0,
-                api_name=endpoint_config["api_name"]
-            )
-        else:
-            # Endpoint simple sin system prompt
-            result = client.predict(
-                user_input,
-                api_name=endpoint_config["api_name"]
-            )
-        
-        # Procesar el resultado
-        if isinstance(result, str):
-            return result
-        elif isinstance(result, (list, tuple)) and len(result) > 0:
-            return str(result[0])
-        else:
-            logger.warning(f"Formato de respuesta inesperado de {endpoint_config['name']}: {type(result)}")
-            return str(result)
-            
+        kwargs = {
+            "prompt": user_input,
+            "history": history_empty,
+            "max_new_tokens": max_tokens,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 50,
+            "repetition_penalty": 1.0,
+            "api_name": api_name,
+        }
+        if supports_system:
+            kwargs["system_prompt"] = final_system
+        result = client.predict(**kwargs)
+        return _normalize_result(result, provider)
+    except Exception:
+        pass
+
+    # Intento 2: Algunos Spaces usan 'message' y 'chat_history'
+    try:
+        kwargs = {
+            "message": user_input,
+            "chat_history": history_empty,
+            "max_new_tokens": max_tokens,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 50,
+            "repetition_penalty": 1.0,
+            "api_name": api_name,
+        }
+        if supports_system:
+            kwargs["system_prompt"] = final_system
+        result = client.predict(**kwargs)
+        return _normalize_result(result, provider)
+    except Exception:
+        pass
+
+    # Intento 3: Firma simplificada 'input'
+    try:
+        kwargs = {
+            "input": user_input,
+            "api_name": api_name,
+        }
+        result = client.predict(**kwargs)
+        return _normalize_result(result, provider)
     except Exception as e:
-        logger.error(f"Error en llamada a {endpoint_config['name']}: {e}")
-        raise
+        raise RuntimeError(f"Error en llamada a Hugging Face Chat UI: {e}")
+
+def _invoke_model(provider: Dict[str, Any], user_input: str, system_prompt: Optional[str], max_tokens: int) -> str:
+    client = _create_model_client(provider["resource"])
+    prompt = (system_prompt or DEFAULT_SYSTEM_PROMPT) + "\nUsuario: " + user_input + "\nAsistente:"
+    try:
+        # InferenceClient.text_generation devuelve string
+        result = client.text_generation(prompt, max_new_tokens=max_tokens, temperature=0.7, top_p=0.9)
+        return result.strip()
+    except Exception as e:
+        raise RuntimeError(f"Fallo modelo {provider['name']}: {e}")
+
+def _normalize_result(result: Any, provider: Dict[str, Any]) -> str:
+    if isinstance(result, str):
+        return result
+    if isinstance(result, (list, tuple)) and result:
+        return str(result[0])
+    return str(result)
+
+def _call_provider(provider: Dict[str, Any], user_input: str, system_prompt: Optional[str], max_tokens: int) -> str:
+    kind = provider["resource_type"]
+    if kind == "space":
+        return _invoke_space(provider, user_input, system_prompt, max_tokens)
+    elif kind == "model":
+        return _invoke_model(provider, user_input, system_prompt, max_tokens)
+    else:
+        raise ValueError(f"Tipo de proveedor desconocido: {kind}")
 
 def _get_fallback_response(user_input: str) -> str:
-    """Genera una respuesta de fallback inteligente cuando todos los endpoints fallan."""
+    """Genera una respuesta de respaldo (fallback) inteligente cuando todos los proveedores fallan."""
     user_lower = user_input.lower()
     
     # Saludos y presentaciones
@@ -133,7 +226,7 @@ def _get_fallback_response(user_input: str) -> str:
     fallback_response="Lo siento, el servicio no está disponible en este momento. Por favor, inténtalo más tarde."
 )
 async def get_llm_response_async(user_input: str, system_prompt: str = None, max_tokens: int = 1024) -> str:
-    """Obtiene una respuesta usando múltiples endpoints como fallback."""
+    """Obtiene una respuesta consultando múltiples proveedores con fallback automático."""
     try:
         # Ejecutar la llamada con fallbacks en un thread separado para mantener async
         response = await asyncio.get_event_loop().run_in_executor(
@@ -146,31 +239,23 @@ async def get_llm_response_async(user_input: str, system_prompt: str = None, max
         raise
 
 def _call_with_fallbacks(user_input: str, system_prompt: str = None, max_tokens: int = 1024) -> str:
-    """Intenta llamar a endpoints con fallbacks automáticos."""
-    
-    for i, endpoint_config in enumerate(GRADIO_ENDPOINTS):
+    """Prueba cada proveedor en orden y aplica fallback si falla, hasta agotar opciones."""
+    for i, provider in enumerate(CHAT_PROVIDERS):
         try:
-            logger.info(f"Intentando endpoint {i+1}/{len(GRADIO_ENDPOINTS)}: {endpoint_config['name']}")
-            response = _call_gradio_endpoint(endpoint_config, user_input, system_prompt, max_tokens)
-            logger.info(f"✅ Respuesta exitosa de {endpoint_config['name']}")
+            logger.info(f"🔄 Proveedor {i+1}/{len(CHAT_PROVIDERS)}: {provider['name']} ({provider['resource_type']})")
+            response = _call_provider(provider, user_input, system_prompt, max_tokens)
+            logger.info(f"✅ Éxito con {provider['name']}")
             return response
-            
         except Exception as e:
-            logger.warning(f"❌ Falló endpoint {endpoint_config['name']}: {e}")
-            
-            # Si es el último endpoint, usar fallback local
-            if i == len(GRADIO_ENDPOINTS) - 1:
-                logger.info("Usando respuesta de fallback local")
+            logger.warning(f"❌ Falló {provider['name']}: {e}")
+            if i == len(CHAT_PROVIDERS) - 1:
+                logger.info("⚙️ Usando fallback local static")
                 return _get_fallback_response(user_input)
-            
-            # Continuar con el siguiente endpoint
             continue
-    
-    # Esto no debería ejecutarse nunca, pero por seguridad
     return _get_fallback_response(user_input)
 
 def get_llm_response(user_input: str, system_prompt: str = None, max_tokens: int = 1024) -> str:
-    """Obtiene una respuesta usando múltiples endpoints (versión síncrona)."""
+    """Obtiene una respuesta consultando proveedores con fallback (versión síncrona)."""
     try:
         return _call_with_fallbacks(user_input, system_prompt, max_tokens)
     except Exception as e:

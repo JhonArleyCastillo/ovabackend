@@ -216,7 +216,7 @@ async def get_current_admin(
     cursor = db.cursor(dictionary=True)
     
     try:
-        # Verify administrator exists and is active
+        # Verificamos que el administrador exista y esté activo
         cursor.execute(
             "SELECT * FROM administradores WHERE id = %s", 
             (token_data.admin_id,)
@@ -226,7 +226,7 @@ async def get_current_admin(
         if admin is None or not admin["activo"]:
             raise credentials_exception
         
-        # Verify session is still valid
+    # Verificamos que la sesión siga siendo válida
         cursor.execute("""
         SELECT * FROM sesiones_admin
         WHERE admin_id = %s AND token = %s AND activa = TRUE 
@@ -241,8 +241,8 @@ async def get_current_admin(
         return admin
         
     except mysql.connector.Error as e:
-        # Log database error in production
-        print(f"Database error in get_current_admin: {e}")
+        # Log de error de base de datos (en producción usar logger estructurado)
+        print(f"Error de base de datos en get_current_admin: {e}")
         raise credentials_exception
     finally:
         cursor.close()

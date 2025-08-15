@@ -29,13 +29,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from .huggingface_service import hf_client, hf_client_async
 from .resilience_service import ResilienceService
-from config import HF_MODELO_SIGN, HF_ASL_SPACE_URL
+from .gradio_compatibility_service import gradio_service
+from config import HF_ASL_SPACE_URL
 
 # Logger para este módulo
 logger = logging.getLogger(__name__)
 
 # Modelos por defecto que usamos
-DEFAULT_SIGN_LANGUAGE_MODEL = HF_MODELO_SIGN
+# NOTA: Eliminado DEFAULT_SIGN_LANGUAGE_MODEL basado en HF_MODELO_SIGN.
+# El reconocimiento ASL se hace vía Space (HF_ASL_SPACE_URL) manejado por
+# GradioCompatibilityService, no por modelo directo.
 DEFAULT_OBJECT_DETECTION_MODEL = "facebook/detr-resnet-50"
 DEFAULT_IMAGE_CAPTIONING_MODEL = "nlpconnect/vit-gpt2-image-captioning"
 
@@ -44,64 +47,66 @@ DEFAULT_IMAGE_CAPTIONING_MODEL = "nlpconnect/vit-gpt2-image-captioning"
     retry_attempts=3,
     fallback_response={
         "objects": [], 
-        "description": "Image analysis service temporarily unavailable"
+        "description": "Servicio de análisis de imágenes temporalmente no disponible"
     }
 )
 async def analyze_image_async(image: Image.Image) -> Dict[str, Any]:
-    """
-    Main function for comprehensive image analysis with resilience patterns.
-    
-    Performs object detection and generates image descriptions using multiple
-    AI models with automatic fallback and retry mechanisms.
-    
-    Args:
-        image (Image.Image): PIL Image object to analyze.
-    
-    Returns:
-        Dict[str, Any]: Analysis results containing detected objects and 
-                       image description.
-                       
-    Raises:
-        ValueError: If image is None or invalid format.
-        RuntimeError: If all analysis attempts fail.
+    """Analiza una imagen de forma completa aplicando patrones de resiliencia.
+
+    Esta es la función "todo en uno" para análisis general de imágenes:
+    - Detecta objetos presentes (lista simulada / placeholder actualmente)
+    - Genera una breve descripción en lenguaje natural
+    - Aplica reintentos y fallback automático si algo falla
+
+    Parámetros:
+        image (PIL.Image): Imagen PIL a analizar.
+
+    Retorna:
+        dict: Resultado con dos claves principales:
+            - objects: Lista de objetos detectados (puede venir vacía)
+            - description: Descripción generada de la escena
+
+    Lanza:
+        ValueError: Si la imagen viene vacía o con formato inválido.
+        RuntimeError: Si todos los intentos de análisis fallan.
     """
     if image is None:
-        raise ValueError("Image cannot be None")
+        raise ValueError("La imagen no puede ser None")
         
     try:
-        # Convert PIL image to numpy array for processing
+        # Convertimos la imagen PIL a numpy para los modelos de visión
         np_image = np.array(image)
         
         if np_image.size == 0:
-            raise ValueError("Image array is empty")
+            raise ValueError("La matriz de imagen está vacía")
         
-        # Detect objects in the image using computer vision models
+        # Detectamos objetos (implementación simulada actualmente)
         objects = await detect_objects_async(np_image)
         
-        # Convert PIL image to bytes for captioning process using PIL instead of OpenCV
+        # Convertimos la imagen a bytes para el modelo de captioning (sin OpenCV)
         import io
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format='JPEG')
         img_byte_arr = img_byte_arr.getvalue()
         
-        # Generate image description using captioning models
+        # Generamos descripción de la imagen
         description_result = await describe_image_captioning_async(img_byte_arr)
         
-        # Prepare structured response
+        # Construimos respuesta estructurada y segura
         result = {
             "objects": objects if isinstance(objects, list) else [],
             "description": description_result.get(
                 "descripcion", 
-                "Could not generate image description"
+                "No se pudo generar una descripción de la imagen"
             )
         }
         
-        logger.info(f"Image analysis completed: {len(result['objects'])} objects detected")
+        logger.info(f"Análisis de imagen completado: {len(result['objects'])} objetos detectados")
         return result
         
     except Exception as e:
-        logger.error(f"Error in image analysis: {str(e)}")
-        raise RuntimeError(f"Image analysis failed: {str(e)}")
+        logger.error(f"Error en análisis de imagen: {str(e)}")
+        raise RuntimeError(f"Fallo el análisis de imagen: {str(e)}")
     
     return result
 
@@ -147,8 +152,8 @@ async def process_sign_language(image: Image.Image, correlation_id: str | None =
     """
     ¡LA FUNCIÓN PRINCIPAL PARA ASL! 
     
-    Esta función procesa imágenes de lenguaje de señas y devuelve qué signo detectó.
-    Es básicamente un wrapper que convierte la imagen y llama a recognize_sign_language.
+    Esta función procesa imágenes de lenguaje de señas usando el nuevo servicio robusto
+    de compatibilidad que maneja las diferencias entre entornos local y producción.
     
     Args:
         image: Imagen PIL que contiene un signo ASL
@@ -156,204 +161,82 @@ async def process_sign_language(image: Image.Image, correlation_id: str | None =
     
     Returns:
         dict: Resultado del reconocimiento con 'resultado', 'confianza', 'alternativas'
+        
+    Nota: Ahora usa GradioCompatibilityService para manejo robusto de fallbacks
     """
-    # Convertir imagen PIL a numpy array para procesamiento
-    # Convertimos PIL a numpy array (formato esperado por recognize_sign_language)
-    np_image = np.array(image)
-    return recognize_sign_language(np_image, correlation_id=correlation_id)
+    prefix = f"[ASL_MAIN][{correlation_id}]" if correlation_id else "[ASL_MAIN]"
+    logger.info(f"{prefix} 🎯 Iniciando procesamiento ASL con servicio robusto")
+    
+    try:
+        # Validaciones básicas de la imagen
+        if image is None:
+            logger.error(f"{prefix} ❌ Imagen es None")
+            return {
+                "resultado": "Error: imagen vacía",
+                "confianza": 0.0,
+                "alternativas": [],
+                "error": "Imagen no proporcionada"
+            }
+        
+        # Verificar que la imagen tiene contenido
+        if hasattr(image, 'size') and (image.size[0] == 0 or image.size[1] == 0):
+            logger.error(f"{prefix} ❌ Imagen tiene dimensiones inválidas: {image.size}")
+            return {
+                "resultado": "Error: imagen inválida",
+                "confianza": 0.0,
+                "alternativas": [],
+                "error": f"Dimensiones inválidas: {image.size}"
+            }
+        
+        logger.debug(f"{prefix} ✅ Imagen válida: {image.format if hasattr(image, 'format') else 'formato desconocido'} - {image.size}")
+        
+        # Usar el servicio de compatibilidad robusto
+        result = gradio_service.get_asl_prediction(image, correlation_id)
+        
+        logger.info(f"{prefix} 🎯 Resultado ASL: '{result.get('resultado', 'N/A')}' confianza: {result.get('confianza', 0)}%")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"{prefix} ❌ Error crítico en procesamiento ASL: {e}")
+        return {
+            "resultado": "Error del sistema",
+            "confianza": 0.0,
+            "alternativas": [],
+            "error": str(e)
+        }
 
 def recognize_sign_language(image: np.ndarray, correlation_id: str | None = None) -> dict:
     """
-    Aquí es donde realmente ocurre el reconocimiento ASL usando Gradio Space.
-    
-    Esta función:
-    1. Conecta al Gradio Space configurado en HF_ASL_SPACE_URL
-    2. Envía la imagen para reconocimiento
-    3. Parsea la respuesta (que puede venir en diferentes formatos)
-    4. Devuelve un resultado estandarizado
-    
-    Si hay problemas con ASL, este es el lugar donde buscar.
-    Optimizada para EC2 - no carga modelos localmente, solo usa la API remota.
+    [DEPRECATED] Wrapper legacy que mantiene compatibilidad con código existente.
+
+    Ahora se delega toda la lógica al nuevo servicio robusto GradioCompatibilityService.
+    Se mantiene temporalmente para no romper importaciones y facilitar rollback.
+
+    Args:
+        image: Imagen en numpy array
+        correlation_id: ID de correlación para logs
+
+    Returns:
+        dict con resultado del reconocimiento
     """
+    prefix = f"[ASL_WRAPPER][{correlation_id}]" if correlation_id else "[ASL_WRAPPER]"
+    logger.debug(f"{prefix} Delegando a GradioCompatibilityService (legacy wrapper)")
     try:
-        from gradio_client import Client, handle_file
-        import tempfile
-        import re
-
-        # Convertimos numpy array a PIL Image
-        pil_image = Image.fromarray(image).convert("RGB")
-
-        # Guardamos temporalmente la imagen (Gradio necesita un archivo)
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
-            pil_image.save(tmp_file.name, format='PNG')
-            temp_path = tmp_file.name
-
-        try:
-            # Conectamos al Space ASL en Hugging Face
-            prefix = f"[ASL_CORE][{correlation_id}]" if correlation_id else "[ASL_CORE]"
-            logger.info(f"{prefix} 🔍 Conectando al Space ASL... {HF_ASL_SPACE_URL}")
-            client = Client(HF_ASL_SPACE_URL)
-
-            # Enviamos la imagen para reconocimiento
-            logger.info(f"{prefix} 📸 Enviando imagen ASL al Space... archivo temporal: {os.path.basename(temp_path)}")
-            t_call = time.time()
-            result = client.predict(image=handle_file(temp_path), api_name="/predict")
-            call_ms = (time.time() - t_call) * 1000
-            
-            # Mostramos un preview de lo que devolvió el Space
-            try:
-                preview = str(result)
-                if len(preview) > 300:
-                    preview = preview[:300] + '…'
-            except Exception:
-                preview = '<no representable>'
-            logger.info(f"{prefix} ⏱️ Space respondió en {call_ms:.1f}ms - tipo: {type(result).__name__} preview: {preview}")
-            
-            # Loggeamos el JSON completo para debugging (puede ser largo)
-            try:
-                if isinstance(result, (dict, list, tuple)):
-                    raw_json = json.dumps(result, ensure_ascii=False, default=str)
-                else:
-                    raw_json = json.dumps({"raw": result}, ensure_ascii=False, default=str)
-                if len(raw_json) > 8000:  # Evitamos logs excesivamente largos
-                    logger.debug(f"{prefix} RAW_JSON (truncado) {raw_json[:8000]}… (longitud total={len(raw_json)})")
-                else:
-                    logger.debug(f"{prefix} RAW_JSON {raw_json}")
-            except Exception as jex:
-                logger.debug(f"{prefix} Error serializando JSON: tipo={type(result).__name__} error={jex}")
-
-            # Procesamos el resultado - aquí viene la parte complicada
-            # Gradio puede devolver diferentes formatos dependiendo del modelo
-            prediction_result = None
-            alt_list: list[dict] = []
-            parse_path = 'unknown'
-            
-            if isinstance(result, (list, tuple)):
-                # Casos posibles: [label, prob, top_preds], [(label, prob), ...], [{label, confidence}, ...]
-                if len(result) >= 2 and isinstance(result[0], str):
-                    parse_path = 'lista[etiqueta,probabilidad,(alternativas?)]'
-                    # Formato típico: [etiqueta, probabilidad, ...]
-                    label = result[0]
-                    prob_raw = result[1]
-                    try:
-                        prob = float(prob_raw)
-                        prob = prob * 100 if prob <= 1 else prob  # Normalizamos a porcentaje
-                    except Exception:
-                        prob = 0.0
-                    
-                    # Intentamos extraer alternativas si existe un tercer elemento
-                    if len(result) >= 3 and isinstance(result[2], (list, tuple)):
-                        for item in list(result[2])[:5]:  # Max 5 alternativas
-                            if isinstance(item, (list, tuple)) and len(item) >= 2:
-                                try:
-                                    p = float(item[1])
-                                    p = p * 100 if p <= 1 else p
-                                except Exception:
-                                    p = 0.0
-                                alt_list.append({"label": str(item[0]), "confidence": round(p, 2)})
-                    return {
-                        "resultado": label,
-                        "confianza": round(prob, 2),
-                        "alternativas": alt_list
-                    }
-                
-                # Si el primer elemento es un diccionario, lo usamos directamente
-                if len(result) >= 1 and isinstance(result[0], dict):
-                    parse_path = 'lista[diccionario]'
-                    prediction_result = result[0]
-                else:
-                    # Si solo hay un string, lo procesamos abajo con regex
-                    if len(result) == 1 and isinstance(result[0], str):
-                        result = result[0]
-                    else:
-                        prediction_result = None
-                        
-            elif isinstance(result, dict):
-                parse_path = 'diccionario_directo'
-                prediction_result = result
-            elif isinstance(result, (str, int, float, bool)):
-                parse_path = 'valor_escalar'
-                # Valores escalares inesperados del Space
-                if not isinstance(result, str):
-                    logger.warning(f"Formato inesperado del Space ASL: {type(result).__name__} -> {result}")
-                prediction_result = None
-            else:
-                logger.warning(f"{prefix} Tipo de respuesta no reconocido del Space ASL: {type(result).__name__}")
-
-            # Si tenemos un diccionario de predicción, lo procesamos
-            if isinstance(prediction_result, dict):
-                logger.debug(f"{prefix} parse_path={parse_path} usando diccionario con keys={list(prediction_result.keys())}")
-                # Normalizamos confianza a escala 0-100
-                raw_conf = prediction_result.get("confidence", 0)
-                try:
-                    conf = float(raw_conf)
-                except Exception:
-                    conf = 0.0
-                conf = conf * 100 if conf <= 1 else conf
-                return {
-                    "resultado": prediction_result.get("label", "Desconocido"),
-                    "confianza": round(conf, 2),
-                    "alternativas": []
-                }
-                
-            elif isinstance(result, str):
-                logger.debug(f"{prefix} parse_path={parse_path} intentando regex en string de {len(result)} caracteres")
-                # String directo: intentamos extraer etiqueta y confianza con regex
-                # Ejemplos esperados:
-                # - "Predicción: A (65.40%)"
-                # - "Prediccion: B (87%)"  
-                # - "A (65.40%)"
-                text = result.strip()
-                # Regex tolerante a acentos y formatos de porcentaje
-                m = re.search(r"(?i)(?:predicci[oó]n:\s*)?([A-Za-z0-9]+)\s*\((\d+(?:[\.,]\d+)?)%\)", text)
-                if m:
-                    label = m.group(1)
-                    conf_str = m.group(2).replace(',', '.')  # Normalizamos punto decimal
-                    try:
-                        conf = float(conf_str)
-                    except Exception:
-                        conf = 0.0
-                    final = {
-                        "resultado": label,
-                        "confianza": round(conf, 2),
-                        "alternativas": []
-                    }
-                    logger.debug(f"{prefix} parse_path=regex exitoso - etiqueta={label} confianza={conf}")
-                    return final
-                
-                # Si no coincide el patrón, devolvemos el texto tal como está
-                final = {
-                    "resultado": text,
-                    "confianza": 0.0,
-                    "alternativas": []
-                }
-                logger.debug(f"{prefix} parse_path=texto_sin_patron - longitud={len(text)}")
-                return final
-            else:
-                logger.warning(f"{prefix} Resultado vacío o inválido del modelo ASL - parse_path={parse_path}")
-                return {
-                    "resultado": "Sin reconocimiento",
-                    "confianza": 0.0,
-                    "alternativas": []
-                }
-
-        finally:
-            # Limpiamos el archivo temporal - importante para no llenar el disco
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-
+        # Convertimos a PIL si viene como numpy
+        pil_image = Image.fromarray(image).convert("RGB") if isinstance(image, np.ndarray) else image
+        return gradio_service.get_asl_prediction(pil_image, correlation_id)
     except Exception as e:
-        logger.error(f"{prefix} Error crítico en reconocimiento ASL: {e}")
-        # Fallback: devolvemos respuesta de error pero estructurada
+        logger.error(f"{prefix} Error en wrapper legacy: {e}")
         return {
-            "resultado": "Error en reconocimiento",
+            "resultado": "Error en wrapper",
             "confianza": 0.0,
             "alternativas": [],
             "error": str(e)
         }
 
 def detect_objects(image: np.ndarray) -> list | dict:
-    """Detecta objetos en una imagen."""
+    """Detecta objetos en una imagen (implementación simulada placeholder)."""
     try:
         client = hf_client()
         # Convert PIL image to bytes for model processing
@@ -372,7 +255,7 @@ def detect_objects(image: np.ndarray) -> list | dict:
 
 @ResilienceService.simple_retry(attempts=2, delay=1.0)
 async def detect_objects_async(image: np.ndarray) -> list | dict:
-    """Detecta objetos en una imagen de forma async."""
+    """Detecta objetos en una imagen de forma asíncrona (placeholder)."""
     try:
         client = await hf_client_async()
         # Convert PIL image to bytes for model processing
@@ -391,7 +274,7 @@ async def detect_objects_async(image: np.ndarray) -> list | dict:
 
 @ResilienceService.simple_retry(attempts=2, delay=1.0)
 async def describe_image_captioning_async(image_bytes: bytes) -> dict:
-    """Genera una descripción para una imagen de forma async."""
+    """Genera una descripción para una imagen de forma asíncrona."""
     try:
         client = await hf_client_async()
         # Lógica real para llamar al modelo
@@ -412,7 +295,7 @@ async def describe_image_captioning_async(image_bytes: bytes) -> dict:
         raise  # Relanzar para que el sistema de resiliencia lo maneje
 
 def describe_image_captioning(image_bytes: bytes) -> dict:
-    """Genera una descripción para una imagen."""
+    """Genera una descripción para una imagen (versión síncrona)."""
     try:
         client = hf_client()
         # Lógica real para llamar al modelo

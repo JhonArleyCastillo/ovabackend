@@ -5,7 +5,7 @@ configuración inicial, herramientas de mantenimiento, etc.
 
 import logging
 import numpy as np
-# OpenCV removed for EC2 optimization - using PIL instead
+# OpenCV removido para optimizar en EC2 - usamos PIL en su lugar
 
 import base64
 import argparse
@@ -49,7 +49,7 @@ def decode_base64_image(base64_string: str) -> np.ndarray | None:
         logger.error(f"Error al decodificar imagen base64: {e}")
         return None
 
-# Audio functions removed for EC2 optimization
+# Funciones de audio removidas para optimización en EC2
 
 def create_error_response(message: str, status_code: int = 500) -> tuple[dict, int]:
     """Crea una respuesta JSON de error estándar."""

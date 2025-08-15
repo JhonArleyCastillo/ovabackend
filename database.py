@@ -325,9 +325,7 @@ else:
                 pass
 
     def setup_database():
-        """
-        Configura la base de datos creando las tablas necesarias si no existen.
-        """
+        """Configura la base de datos creando tablas necesarias si aún no existen."""
         try:
             with db_session() as conn:
                 if IS_DEVELOPMENT and USE_SQLITE:

@@ -120,7 +120,7 @@ El backend de OVA Web proporciona los servicios de:
 🤖 chat_service.py         # LLM via gradio_client
 🎙️ audio_service.py        # STT/TTS Hugging Face
 🖼️ image_service.py        # Detección objetos + captioning
-🤏 asl_model_service.py    # Lenguaje de señas ASL
+🤏 asl_model_service.py    # Lenguaje de señas ASL (vía Hugging Face Space)
 🛡️ resilience_service.py   # Circuit breaker, retry
 👨‍💼 admin_service.py        # Gestión administrativa
 🔧 base_model_service.py   # Servicios base comunes
@@ -196,11 +196,11 @@ get_llm_response_async(message)
 
 ### 🤏 **3. Análisis de Lenguaje de Señas ASL**
 ```python
-# asl_model_service.py - Procesamiento ASL
+# asl_model_service.py - Procesamiento ASL (solo Spaces)
 analyze_asl_image(image_data)
 ├─ validate_image_format()       # JPG/PNG/WEBP
 ├─ resize_and_preprocess()       # Optimizar imagen
-├─ call_hf_space_api()           # JhonArleyCastilloV/ASL_model_1
+├─ call_hf_space_api()           # Usa HF_ASL_SPACE_URL + HF_TOKEN
 ├─ parse_prediction_result()     # Extraer predicción
 ├─ apply_confidence_threshold()  # Filtrar por confianza
 └─ return_asl_translation()      # Devolver traducción
@@ -373,7 +373,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30 # Tiempo expiración tokens
 HF_API_KEY=your_huggingface_api_key_here
 
 # Modelo de lenguaje de señas ASL
-HF_MODELO_SIGN=JhonArleyCastilloV/ASL_model_1
+# Eliminado: HF_MODELO_SIGN
+HF_ASL_SPACE_URL=https://jhonarleycastillov-asl-image.hf.space
 HF_ASL_SPACE_URL=https://jhonarleycastillov-asl-image.hf.space
 
 # Modelo general de chat (opcional)

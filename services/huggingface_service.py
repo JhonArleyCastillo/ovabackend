@@ -18,7 +18,7 @@ class HuggingFaceService:
     @classmethod
     @ResilienceService.simple_retry(attempts=3, delay=2.0)
     async def get_client_async(cls) -> InferenceClient:
-        """Obtiene o inicializa el cliente de inferencia de Hugging Face de forma async."""
+        """Obtiene o inicializa (si no existe) el cliente de inferencia de Hugging Face (versión asíncrona)."""
         if cls._client is None:
             if not HF_API_KEY:
                 logger.error("API key de Hugging Face no configurada correctamente.")
@@ -34,7 +34,7 @@ class HuggingFaceService:
 
     @classmethod
     def get_client(cls) -> InferenceClient:
-        """Obtiene o inicializa el cliente de inferencia de Hugging Face."""
+        """Obtiene o inicializa (si no existe) el cliente de inferencia de Hugging Face (modo síncrono)."""
         if cls._client is None:
             if not HF_API_KEY:
                 logger.error("API key de Hugging Face no configurada correctamente.")
@@ -55,7 +55,7 @@ class HuggingFaceService:
         fallback_response=None
     )
     async def verify_connection_async(cls) -> bool:
-        """Verifica si la conexión con Hugging Face es válida de forma async."""
+        """Verifica (asíncrono) que podemos crear y usar el cliente de Hugging Face correctamente."""
         try:
             client = await cls.get_client_async()
             logger.info("Conexión con Hugging Face verificada.")
@@ -69,7 +69,7 @@ class HuggingFaceService:
 
     @classmethod
     def verify_connection(cls) -> bool:
-        """Verifica si la conexión con Hugging Face es válida."""
+        """Verifica (síncrono) que podemos crear y usar el cliente de Hugging Face correctamente."""
         try:
             client = cls.get_client()
             logger.info("Conexión con Hugging Face verificada.")
