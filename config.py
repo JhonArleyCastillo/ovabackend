@@ -94,27 +94,55 @@ if not HF_ASL_SPACE_URL:
 
 # ===== Configuración CORS =====
 # Estos son los dominios que pueden hacer peticiones al backend
-# En desarrollo permitimos localhost, en producción solo HTTPS
+# En desarrollo permitimos localhost, en producción SOLO HTTPS
 _default_origins = [
     "https://helpova.web.app",           # Producción principal
     "https://api.ovaonline.tech",        # API en producción
     "https://www.api.ovaonline.tech",    # API con www
-    "http://localhost:3000",             # Frontend local React
-    "http://127.0.0.1:3000",            # Frontend local alternativo
 ]
 
 _raw_origins = os.getenv("ALLOWED_ORIGINS", ",".join(_default_origins)).split(",")
 
-# Filtro de seguridad: en producción solo HTTPS (excepto localhost para testing)
+# Filtro de seguridad ESTRICTO: en producción solo HTTPS, sin excepciones
 if not IS_DEVELOPMENT:
-    ALLOWED_ORIGINS = [o.strip() for o in _raw_origins if o.strip().startswith("https://") or "localhost" in o]
-    logger.info("Modo producción: solo orígenes HTTPS permitidos")
+    # PRODUCCIÓN: Solo HTTPS, sin localhost, sin HTTP
+    ALLOWED_ORIGINS = [
+        o.strip() for o in _raw_origins 
+        if o.strip().startswith("https://") and not "localhost" in o.lower() and not "127.0.0.1" in o
+    ]
+    logger.info("🔒 Modo producción: SOLO orígenes HTTPS permitidos (HTTP BLOQUEADO)")
+    
+    # Validación adicional: asegurar que no hay URLs HTTP
+    if any(origin.startswith("http://") for origin in ALLOWED_ORIGINS):
+        raise ValueError("🚨 SEGURIDAD: URLs HTTP detectadas en producción - esto NO está permitido")
+        
 else:
-    ALLOWED_ORIGINS = [o.strip() for o in _raw_origins]
-    logger.info("Modo desarrollo: todos los orígenes permitidos")
+    # DESARROLLO: Permitir localhost HTTP para testing local
+    _dev_origins = [
+        "http://localhost:3000",             # Frontend local React
+        "http://127.0.0.1:3000",            # Frontend local alternativo
+        "https://localhost:3000",            # HTTPS local si se configura
+    ]
+    ALLOWED_ORIGINS = [o.strip() for o in _raw_origins + _dev_origins]
+    logger.info("🛠️ Modo desarrollo: localhost HTTP permitido para testing")
 
 logger.info(f"CORS configurado para: {ALLOWED_ORIGINS}")
 CORS_MAX_AGE = int(os.getenv("CORS_MAX_AGE", "3600"))  # Cache preflight requests
+
+# ===== Configuración de Seguridad HTTPS =====
+# Forzar HTTPS en producción
+FORCE_HTTPS = not IS_DEVELOPMENT
+if FORCE_HTTPS:
+    logger.info("🔒 HTTPS forzado en producción - HTTP requests serán rechazados")
+
+# Headers de seguridad para producción
+SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-XSS-Protection": "1; mode=block",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
+} if not IS_DEVELOPMENT else {}
 
 # ===== Configuración JWT (autenticación) =====
 # Clave secreta para firmar tokens JWT - ¡CAMBIAR EN PRODUCCIÓN!

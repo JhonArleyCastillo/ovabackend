@@ -30,8 +30,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from .huggingface_service import hf_client, hf_client_async
 from .resilience_service import ResilienceService
 from .gradio_compatibility_service import gradio_service
-from config import HF_ASL_SPACE_URL
 
+HF_ASL_SPACE_URL: Optional[str] = os.getenv(
+    "HF_ASL_SPACE_URL",
+    "https://jhonarleycastillov-asl-image.hf.space"
+)
 # Logger para este módulo
 logger = logging.getLogger(__name__)
 

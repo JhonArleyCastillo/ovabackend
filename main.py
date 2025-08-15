@@ -12,6 +12,7 @@ from ovabackend.config import ALLOWED_ORIGINS, CORS_MAX_AGE, IS_DEVELOPMENT
 from ovabackend.routers import status_router, websocket_router, image_router, auth_router, usuarios_router, contact_router, resilience_router
 from ovabackend.logging_config import configure_logging
 from ovabackend.database import setup_database
+from ovabackend.middleware import https_security_middleware, validate_cors_origin
 import ovabackend.db_models
 
 # Configuramos el logging antes que nada para tener visibilidad de todo
@@ -49,9 +50,23 @@ for origin in ALLOWED_ORIGINS:
     if not IS_DEVELOPMENT and not (origin.startswith("https://") or "localhost" in origin):
         logger.warning(f"Origen inseguro en producción: {origin}")
 
+# MIDDLEWARE DE SEGURIDAD HTTPS - DEBE IR ANTES QUE CORS
+logger.info("🔒 Configurando middleware de seguridad HTTPS...")
+app.middleware("http")(https_security_middleware)
+
+# CORS con validación adicional de orígenes
+filtered_origins = []
+for origin in ALLOWED_ORIGINS:
+    if validate_cors_origin(origin):
+        filtered_origins.append(origin)
+    else:
+        logger.warning(f"🚫 Origin filtrado por seguridad: {origin}")
+
+logger.info(f"✅ Origins validados para CORS: {filtered_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=filtered_origins,
     allow_credentials=True,
     allow_methods=allowed_methods,
     allow_headers=allowed_headers,
@@ -82,6 +97,17 @@ async def startup_event():
     if not ALLOWED_ORIGINS:
         logger.error("❌ ALLOWED_ORIGINS no está configurado - esto romperá CORS")
         sys.exit(1)
+    
+    # Verificación de seguridad en producción
+    if not IS_DEVELOPMENT:
+        logger.info("🔒 Modo PRODUCCIÓN detectado - aplicando configuración de seguridad")
+        https_only_origins = [origin for origin in ALLOWED_ORIGINS if origin.startswith("https://")]
+        if len(https_only_origins) != len(ALLOWED_ORIGINS):
+            logger.warning("⚠️ Algunos orígenes pueden ser inseguros en producción")
+        logger.info(f"🛡️ Middleware HTTPS activo - solo se permitirán conexiones seguras")
+        logger.info(f"🔐 Headers de seguridad aplicados automáticamente")
+    else:
+        logger.info("🔧 Modo DESARROLLO - permitiendo HTTP para localhost")
     
     # Logging de configuración para debugging
     logger.info(f"✅ Métodos HTTP permitidos: {allowed_methods}")
