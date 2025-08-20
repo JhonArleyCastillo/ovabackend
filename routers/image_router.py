@@ -128,6 +128,7 @@ def _validate_content_type(file: UploadFile):
 # Ambos devuelven el mismo formato limpio y estandarizado
 # -----------------------------
 @router.post("/asl/predict")
+@handle_errors
 async def predict_asl(file: UploadFile = File(...)):
     """
     El endpoint principal para reconocimiento ASL.
@@ -177,6 +178,7 @@ async def predict_asl(file: UploadFile = File(...)):
 
 
 @router.post("/asl/predict_space")
+@handle_errors
 async def predict_asl_space(file: UploadFile = File(...)):
     """
     Alias del endpoint principal, mantenido por compatibilidad histórica.

@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import re
 from typing import Optional, Dict, Any
 from .resilience_service import ResilienceService
 
@@ -62,9 +63,66 @@ if ENVIRONMENT.lower() == "production":
         [p for p in CHAT_PROVIDERS if p["resource_type"] == "space"]
     )
 
-DEFAULT_SYSTEM_PROMPT = "Eres un asistente útil y amigable. Responde de manera clara y concisa en español."
+DEFAULT_SYSTEM_PROMPT = (
+    "Eres un asistente útil y amigable. Responde únicamente en español, "
+    "de manera clara y concisa. No incluyas explicaciones del proceso de pensamiento, "
+    "ni contenido oculto o de depuración."
+)
 
 # ================= Utilidades internas ================= #
+
+_DETAILS_BLOCK_RE = re.compile(r"<details\b[\s\S]*?</details>", re.IGNORECASE)
+_COT_FENCES_RE = re.compile(
+    r"```(?:thought|analysis|reasoning|chain ?of ?thought|inner ?monologue)[\s\S]*?```",
+    re.IGNORECASE,
+)
+_COT_INLINE_MARKERS_RE = re.compile(
+    r"\[\[(?:thinking|analysis|cot)\]\][\s\S]*?\[\[/(?:thinking|analysis|cot)\]\]",
+    re.IGNORECASE,
+)
+_META_EN_MARKERS = (
+    "Click to view Thinking Process",
+    "Thinking Process",
+    "Here is the",
+    "As an AI",
+    "I am an AI",
+)
+
+def sanitize_response_text(text: str) -> str:
+    """Remove chain-of-thought, debug, or meta content and keep only the assistant reply.
+
+    Rules:
+    - Strip <details>…</details> blocks entirely.
+    - Strip fenced code blocks labeled as analysis/thought.
+    - Strip custom [[thinking]]…[[/thinking]] markers.
+    - Remove common English meta markers if present.
+    - Trim whitespace; if empty, return a safe Spanish fallback.
+    """
+    if not text:
+        return ""
+
+    cleaned = text
+    cleaned = _DETAILS_BLOCK_RE.sub("", cleaned)
+    cleaned = _COT_FENCES_RE.sub("", cleaned)
+    cleaned = _COT_INLINE_MARKERS_RE.sub("", cleaned)
+
+    # Remove obvious meta lines at the start
+    lines = [ln for ln in cleaned.splitlines() if ln.strip()]
+    filtered_lines = []
+    for ln in lines:
+        if any(marker.lower() in ln.lower() for marker in _META_EN_MARKERS):
+            continue
+        filtered_lines.append(ln)
+    cleaned = "\n".join(filtered_lines).strip()
+
+    # Very light normalization: ensure we don't leak the user message reflection
+    if cleaned.lower().startswith("user says") or cleaned.lower().startswith("usuario dice"):
+        cleaned = cleaned.split("\n", 1)[-1].strip() if "\n" in cleaned else ""
+
+    # If after cleaning it's empty, provide a minimal Spanish response
+    if not cleaned:
+        cleaned = "Mensaje recibido. ¿En qué puedo ayudarte?"
+    return cleaned
 
 def _create_space_client(space_slug: str) -> Client:
     """Crea un cliente Gradio para un Space. Usa token si existe (para Spaces privados)."""
@@ -282,7 +340,7 @@ async def get_llm_response_async(user_input: str, system_prompt: str = None, max
             None, _call_with_fallbacks, user_input, system_prompt, max_tokens
         )
         logger.info(f"Respuesta generada para: '{user_input[:30]}...'")
-        return response
+        return sanitize_response_text(response)
     except Exception as e:
         logger.error(f"Error al obtener respuesta: {e}")
         raise
@@ -314,9 +372,9 @@ def _call_with_fallbacks(user_input: str, system_prompt: str = None, max_tokens:
 def get_llm_response(user_input: str, system_prompt: str = None, max_tokens: int = 1024) -> str:
     """Obtiene una respuesta consultando proveedores con fallback (versión síncrona)."""
     try:
-        return _call_with_fallbacks(user_input, system_prompt, max_tokens)
+        return sanitize_response_text(_call_with_fallbacks(user_input, system_prompt, max_tokens))
     except Exception as e:
         logger.error(f"Error al obtener respuesta: {e}")
-        return _get_fallback_response(user_input)
+        return sanitize_response_text(_get_fallback_response(user_input))
 
 # APIs externas migradas a gradio_client - código legacy limpiado 

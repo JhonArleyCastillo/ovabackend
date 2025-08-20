@@ -23,6 +23,7 @@ from config import (
     JWT_ALGORITHM, 
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from common.jwt_keys import current_key_and_kid, derive_key, candidate_keys_for_legacy_verification
 try:
     from .database import get_db
 except ImportError:
@@ -110,10 +111,14 @@ def create_access_token(
     to_encode.update({"exp": expire})
     
     try:
+        # Use rotating key and embed kid in header for verification
+        key_bytes, kid = current_key_and_kid()
+        headers = {"kid": kid}
         encoded_jwt = jwt.encode(
-            to_encode, 
-            JWT_SECRET_KEY, 
-            algorithm=JWT_ALGORITHM
+            to_encode,
+            key_bytes,
+            algorithm=JWT_ALGORITHM,
+            headers=headers,
         )
         return encoded_jwt
     except Exception as e:
@@ -196,11 +201,31 @@ async def get_current_admin(
     
     try:
         # Decodificamos el token JWT para extraer la información
-        payload = jwt.decode(
-            token, 
-            JWT_SECRET_KEY, 
-            algorithms=[JWT_ALGORITHM]
-        )
+        # Try verifying using kid if present; otherwise attempt rolling candidates
+        unverified_headers = jwt.get_unverified_header(token)
+        kid = unverified_headers.get("kid") if isinstance(unverified_headers, dict) else None
+        payload = None
+        if kid is not None:
+            try:
+                payload = jwt.decode(
+                    token,
+                    derive_key(int(kid)),
+                    algorithms=[JWT_ALGORITHM],
+                )
+            except Exception:
+                # Fall back to legacy/candidates if mismatch
+                pass
+        if payload is None:
+            last_error = None
+            for key in candidate_keys_for_legacy_verification():
+                try:
+                    payload = jwt.decode(token, key, algorithms=[JWT_ALGORITHM])
+                    break
+                except Exception as e:
+                    last_error = e
+                    continue
+            if payload is None:
+                raise last_error or JWTError("No se pudo verificar el token")
         email: str = payload.get("sub")
         admin_id: int = payload.get("admin_id")
         

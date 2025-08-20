@@ -5,22 +5,75 @@ import uuid
 import sys
 import os
 
-# Add the parent directory to sys.path to allow imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Ensure repository root and package dir are on sys.path
+_here = os.path.dirname(__file__)
+sys.path.insert(0, os.path.abspath(os.path.join(_here, '..', '..')))  # repo root
+sys.path.insert(0, os.path.abspath(os.path.join(_here, '..')))        # ovabackend package
 
 # Import services and utilities
 try:
     from ..services.chat_service import get_llm_response
     from ..utils import create_error_response
     from ..routes import WS_CHAT
-    from ..models import TextMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
     from ..common.router_utils import handle_errors
+    # Modelos: preferir import del paquete, luego módulo local, luego relativo
+    try:
+        from ovabackend.models import (  # type: ignore
+            TextMessage,
+            ErrorMessage,
+            ConnectionMessage,
+            TypingMessage,
+            MessageType,
+        )
+    except Exception:
+        try:
+            from models import (  # type: ignore
+                TextMessage,
+                ErrorMessage,
+                ConnectionMessage,
+                TypingMessage,
+                MessageType,
+            )
+        except Exception:
+            from ..models import (  # type: ignore
+                TextMessage,
+                ErrorMessage,
+                ConnectionMessage,
+                TypingMessage,
+                MessageType,
+            )
 except ImportError:
+    # Fallback para ejecuciones directas (sin contexto de paquete)
     from services.chat_service import get_llm_response
     from utils import create_error_response
     from routes import WS_CHAT
-    from models import TextMessage, ErrorMessage, ConnectionMessage, TypingMessage, MessageType
     from common.router_utils import handle_errors
+    # Importar modelos de forma robusta según el contexto de ejecución
+    try:
+        from ovabackend.models import (  # type: ignore
+            TextMessage,
+            ErrorMessage,
+            ConnectionMessage,
+            TypingMessage,
+            MessageType,
+        )
+    except Exception:
+        try:
+            from models import (  # type: ignore
+                TextMessage,
+                ErrorMessage,
+                ConnectionMessage,
+                TypingMessage,
+                MessageType,
+            )
+        except Exception:
+            from ..models import (  # type: ignore
+                TextMessage,
+                ErrorMessage,
+                ConnectionMessage,
+                TypingMessage,
+                MessageType,
+            )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -37,6 +90,8 @@ async def chat_websocket(websocket: WebSocket):
     
     logger.info(f"🔌 Nueva solicitud de conexión WebSocket desde {client_info} (ID: {connection_id})")
     
+    # Inicializar contador antes del try para evitar errores en finally si falla temprano
+    message_count = 0
     try:
         await websocket.accept()
         logger.info(f"✅ Conexión WebSocket aceptada para chat (ID: {connection_id})")
@@ -48,8 +103,6 @@ async def chat_websocket(websocket: WebSocket):
         )
         await websocket.send_json(connection_msg.dict())
         logger.debug(f"📤 Mensaje de conexión enviado a {connection_id}")
-        
-        message_count = 0
         
         while True:
             try:
